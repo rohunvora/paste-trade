@@ -41,8 +41,31 @@ npx skills add rohunvora/paste-trade-skill@v1 -a claude-code
 npx skills add rohunvora/paste-trade-skill@v1 -a codex
 ```
 
-## First `/trade` run
+## Use Cases and Example Inputs
 
+- YouTube (podcasts, long videos, interviews): Gemini API is best for multi-speaker videos.
+```text
+/trade https://www.youtube.com/watch?v=<video_id>
+```
+
+- Twitter/X (tweets or entire profiles): X API is preferred.
+```text
+/trade https://x.com/<handle>/status/<tweet_id>
+/trade https://x.com/<handle> (profile scan when supported in your client/runtime)
+```
+
+- Articles and PDFs:
+```text
+/trade https://example.com/research-note
+/trade https://example.com/report.pdf
+```
+
+- Screenshots:
+```text
+/trade [attach screenshot] route every tradeable thesis in this image
+```
+
+- Anything (raw thesis or market observation):
 ```text
 /trade NVDA is down 25% and Blackwell demand is unchanged. route the cleanest expression.
 ```
