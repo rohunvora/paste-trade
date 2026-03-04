@@ -2,28 +2,19 @@
 
 This repository ships the public `/trade` skill for `paste.trade`.
 
-## Purpose
-
-Keep agent behavior predictable for installed users across:
-- OpenClaw
-- Claude Code
-- Codex
-
 ## Canonical Runtime Source
 
-- Use [`SKILL.md`](./SKILL.md) as the canonical `/trade` runtime behavior.
-- Do not rename or replace the `/trade` command.
+- Use [`SKILL.md`](./SKILL.md) as the runtime source of truth.
+- Keep the `/trade` command name unchanged.
+- If this file conflicts with `SKILL.md`, follow `SKILL.md` and update `AGENTS.md`.
 
 ## Runtime Guardrails
 
-1. Keep first run unblocked:
-   - X login is secondary and must not block first `/trade`.
-2. Keep account portability clear:
-   - preferred path is one shared `PASTE_TRADE_KEY` across clients.
-   - fallback path is connect/link flow for split keys.
-3. Keep OpenClaw wrapper dependency explicit:
-   - `/trade` dispatch depends on `trade-slash-wrapper`.
-   - setup instructions live in [`docs/install/openclaw.md`](./docs/install/openclaw.md).
+- X login is secondary and must not block first `/trade` run.
+- Preferred portability path: reuse one `PASTE_TRADE_KEY` across clients.
+- Fallback portability path: run connect/link flow for split keys (`bun run skill/adapters/board/connect.ts`).
+- OpenClaw `/trade` dispatch depends on `trade-slash-wrapper`.
+- OpenClaw setup instructions are in [`docs/install/openclaw.md`](./docs/install/openclaw.md).
 
 ## Install and Update Commands
 
