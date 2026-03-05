@@ -9,7 +9,7 @@
  *   upload and diarize all chunks in parallel, merge results.
  *
  * Usage:
- *   bun run skill/adapters/transcript/diarize.ts "https://youtube.com/watch?v=xxx"
+ *   bun run skill-dev/skill-v2-lab/scripts/diarize.ts "https://youtube.com/watch?v=xxx"
  *
  * Requires: GEMINI_API_KEY env var, yt-dlp, ffmpeg
  * Cost: ~$0.14/hour (Flash), ~$0.26/hour (Pro)
@@ -19,7 +19,6 @@ import { $ } from "bun";
 import { tmpdir } from "os";
 import { join } from "path";
 import { unlink, readdir } from "node:fs/promises";
-import { mkdirSync } from "fs";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -478,7 +477,7 @@ async function processAudio(
 async function main() {
   const url = process.argv[2];
   if (!url) {
-    console.error("Usage: bun run skill/adapters/transcript/diarize.ts <url>");
+    console.error("Usage: bun run skill-dev/skill-v2-lab/scripts/diarize.ts <url>");
     process.exit(1);
   }
 
@@ -531,8 +530,7 @@ async function main() {
     if (ytMeta.channelHandle) parsed.channel_handle = ytMeta.channelHandle;
     if (ytMeta.channelUrl) parsed.channel_url = ytMeta.channelUrl;
     const hash = new Bun.CryptoHasher("sha256").update(url).digest("hex").slice(0, 12);
-    const dir = join(import.meta.dir, "../../../data/sources");
-    mkdirSync(dir, { recursive: true });
+    const dir = join(import.meta.dir, "../data/sources");
     // Separate path from extract.ts — no shared mutable artifact
     const filePath = join(dir, `source-${hash}.diarized.json`);
     parsed.saved_to = filePath;

@@ -1,6 +1,14 @@
 import type { Liquidity } from "../../types";
 
 const API = "https://api.hyperliquid.xyz/info";
+// Resolved lazily — Workers doesn't support new URL() with import.meta.url at module scope
+function getAnnotationCachePath(): string | null {
+  try {
+    return new URL("./annotation-cache.json", import.meta.url).pathname;
+  } catch {
+    return null; // Workers environment — no filesystem access
+  }
+}
 
 export const DEFAULT_ENABLED_DEXES = ["xyz", "vntl", "cash", "km", "flx", "hyna"] as const;
 
@@ -47,6 +55,11 @@ interface HLPerpDexRaw {
   assetToStreamingOiCap?: Array<[string, string]>;
   assetToFundingMultiplier?: Array<[string, string]>;
   assetToFundingInterestRate?: Array<[string, string]>;
+}
+
+interface HLPerpAnnotationRaw {
+  category?: string | null;
+  description?: string | null;
 }
 
 interface SemanticMetadata {
@@ -154,6 +167,14 @@ const PRICING_NOTE_BY_BASE: Record<string, string> = {
   ANTHROPIC: "Contract price tracks company valuation divided by 1B.",
 };
 
+const ASSET_CLASS_BY_PERP_CATEGORY: Record<string, AssetClass> = {
+  stocks: "equity",
+  indices: "index",
+  commodities: "commodity",
+  preipo: "private_valuation",
+  fx: "fx",
+};
+
 export interface HlInstrument {
   full_symbol: string;
   base_symbol: string;
@@ -220,6 +241,11 @@ export interface HlQueryResult extends HlResolution {
 interface BuildUniverseOptions {
   enabled_dexes?: string[];
   strict?: boolean;
+}
+
+interface AnnotationCacheFile {
+  fetched_at?: string;
+  annotations?: Record<string, HLPerpAnnotationRaw>;
 }
 
 function parseNumber(value: unknown): number | undefined {
@@ -351,28 +377,115 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
+async function loadAnnotationDescriptionCache(warnings: string[]): Promise<Map<string, string>> {
+  const cachePath = getAnnotationCachePath();
+  if (!cachePath || typeof globalThis.Bun === "undefined") {
+    warnings.push("annotation-cache.json unavailable (non-Bun environment); using hardcoded instrument descriptions only.");
+    return new Map();
+  }
+  const cacheFile = Bun.file(cachePath);
+
+  try {
+    if (!(await cacheFile.exists())) {
+      warnings.push("annotation-cache.json missing; using hardcoded instrument descriptions only.");
+      return new Map();
+    }
+  } catch (error) {
+    warnings.push(
+      `annotation-cache.json lookup failed (${errorMessage(error)}); using hardcoded instrument descriptions only.`
+    );
+    return new Map();
+  }
+
+  try {
+    const parsed = await cacheFile.json() as AnnotationCacheFile;
+    if (!parsed || typeof parsed !== "object" || !parsed.annotations || typeof parsed.annotations !== "object") {
+      warnings.push("annotation-cache.json malformed; using hardcoded instrument descriptions only.");
+      return new Map();
+    }
+
+    const descriptions = new Map<string, string>();
+    for (const [symbol, annotation] of Object.entries(parsed.annotations)) {
+      if (!annotation || typeof annotation !== "object") continue;
+      const description =
+        typeof annotation.description === "string" && annotation.description.trim()
+          ? annotation.description.trim()
+          : "";
+      if (!description) continue;
+      descriptions.set(symbol.toLowerCase(), description);
+    }
+    return descriptions;
+  } catch (error) {
+    warnings.push(
+      `annotation-cache.json parse failed (${errorMessage(error)}); using hardcoded instrument descriptions only.`
+    );
+    return new Map();
+  }
+}
+
+function normalizePerpCategory(category: unknown): string | undefined {
+  if (typeof category !== "string") return undefined;
+  const normalized = category.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return normalized;
+}
+
+function parsePerpCategoryMap(raw: unknown): Map<string, string> {
+  const parsed = new Map<string, string>();
+  if (!Array.isArray(raw)) return parsed;
+  for (const entry of raw) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const symbol = entry[0];
+    const category = normalizePerpCategory(entry[1]);
+    if (typeof symbol !== "string" || !category) continue;
+    parsed.set(symbol.trim().toLowerCase(), category);
+  }
+  return parsed;
+}
+
+function resolvePerpCategory(categoriesBySymbol: Map<string, string>, fullSymbol: string, dex: string, base: string): string | undefined {
+  const fullKey = fullSymbol.trim().toLowerCase();
+  const baseKey = base.trim().toLowerCase();
+  const dexKey = `${dex}:${base}`.toLowerCase();
+
+  return categoriesBySymbol.get(fullKey) ?? categoriesBySymbol.get(dexKey) ?? categoriesBySymbol.get(baseKey);
+}
+
 export async function buildHlUniverse(options: BuildUniverseOptions = {}): Promise<HlUniverse> {
   const strict = options.strict ?? false;
   const enabledDexes = normalizeEnabledDexes(options.enabled_dexes);
   const requestedDexes = ["default", ...enabledDexes];
   const failedDexes: HlUniverseBuildFailure[] = [];
   const warnings: string[] = [];
+  const annotationDescriptionsBySymbol = await loadAnnotationDescriptionCache(warnings);
 
   let perpDexsAvailable = false;
   let dexMeta = new Map<string, HLPerpDexRaw>();
+  let perpCategoriesBySymbol = new Map<string, string>();
+  const [perpDexsResult, perpCategoriesResult] = await Promise.allSettled([
+    postInfo<Array<HLPerpDexRaw | null>>({ type: "perpDexs" }),
+    postInfo<unknown>({ type: "perpCategories" }),
+  ]);
 
-  try {
-    const rawPerpDexs = await postInfo<Array<HLPerpDexRaw | null>>({ type: "perpDexs" });
-    const perpDexs = rawPerpDexs.filter((dex): dex is HLPerpDexRaw => Boolean(dex));
+  if (perpDexsResult.status === "fulfilled") {
+    const perpDexs = perpDexsResult.value.filter((dex): dex is HLPerpDexRaw => Boolean(dex));
     dexMeta = new Map<string, HLPerpDexRaw>(perpDexs.map((dex) => [dex.name, dex]));
     perpDexsAvailable = true;
-  } catch (error) {
-    const reason = errorMessage(error);
+  } else {
+    const reason = errorMessage(perpDexsResult.reason);
     failedDexes.push({ dex: "perpDexs", reason });
     warnings.push("perpDexs unavailable; dex metadata fields may be partial.");
     if (strict) {
       throw new Error(`buildHlUniverse strict mode: failed to fetch perpDexs (${reason})`);
     }
+  }
+
+  if (perpCategoriesResult.status === "fulfilled") {
+    perpCategoriesBySymbol = parsePerpCategoryMap(perpCategoriesResult.value);
+  } else {
+    const reason = errorMessage(perpCategoriesResult.reason);
+    failedDexes.push({ dex: "perpCategories", reason });
+    warnings.push("perpCategories unavailable; using hardcoded asset-class fallbacks.");
   }
 
   let toFetch = enabledDexes;
@@ -438,6 +551,12 @@ export async function buildHlUniverse(options: BuildUniverseOptions = {}): Promi
         openInterest != null && oraclePrice != null ? Math.round(openInterest * oraclePrice) : undefined;
 
       const semantic = inferSemanticMetadata(actualDex, base);
+      const perpCategory = resolvePerpCategory(perpCategoriesBySymbol, name, actualDex, base);
+      const categoryAssetClass =
+        perpCategory && Object.prototype.hasOwnProperty.call(ASSET_CLASS_BY_PERP_CATEGORY, perpCategory)
+          ? ASSET_CLASS_BY_PERP_CATEGORY[perpCategory]
+          : undefined;
+      const cachedDescription = annotationDescriptionsBySymbol.get(name.toLowerCase());
       const sourceWarnings: string[] = [];
       if (actualDex === "cash" && base.toUpperCase() === "USA500") {
         sourceWarnings.push("Some dreamcash docs use US500-USDT naming; live executable symbol is cash:USA500.");
@@ -460,9 +579,9 @@ export async function buildHlUniverse(options: BuildUniverseOptions = {}): Promi
         oi_cap_usd: oiCaps.get(name),
         funding_multiplier: fundingMult.get(name),
         funding_interest_rate: fundingRate.get(name),
-        asset_class: semantic.asset_class,
+        asset_class: categoryAssetClass ?? semantic.asset_class,
         theme_tags: semantic.theme_tags,
-        instrument_description: semantic.instrument_description,
+        instrument_description: semantic.instrument_description ?? cachedDescription,
         pricing_note: semantic.pricing_note,
         source_warnings: sourceWarnings.length ? sourceWarnings : undefined,
       });

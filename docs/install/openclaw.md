@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
+npx skills add rohunvora/paste-trade-skill@v2 -a openclaw
 ```
 
 ## Required wrapper/plugin setup
@@ -50,4 +50,4 @@ bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
 ## Account portability
 
 - Preferred: reuse one `PASTE_TRADE_KEY` across clients.
-- Fallback (separate keys already created): run `bun run skill/adapters/board/connect.ts` on the key/account you want to keep.
+- Fallback (separate keys already created): run `bun run scripts/connect.ts` on the key/account you want to keep.

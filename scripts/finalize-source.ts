@@ -2,17 +2,17 @@
  * Explicitly finalize a source processing run.
  *
  * Usage:
- *   echo '{ "source_id": "...", "source_theses": [...], "source_summary": "...", "message": "All trades posted" }' | bun run skill/adapters/board/finalize-source.ts --run-id <runId>
- *   bun run skill/adapters/board/finalize-source.ts --run-id <runId> '{ "source_id": "...", "source_theses": [...] }'
+ *   echo '{ "source_id": "...", "source_theses": [...], "source_summary": "...", "message": "All trades posted" }' | bun run skill-dev/skill-v2-lab/scripts/finalize-source.ts --run-id <runId>
+ *   bun run skill-dev/skill-v2-lab/scripts/finalize-source.ts --run-id <runId> '{ "source_id": "...", "source_theses": [...] }'
  */
 
 import { existsSync } from "fs";
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { clearStreamContext, pushEvent } from "./stream-context";
 import { appendTraceEvent, hashForTrace } from "./trace-audit";
-import { normalizeRouteStatus } from "../extraction/validate";
+import { normalizeRouteStatus } from "./validate";
 
-const DATA_DIR = new URL("../../../data", import.meta.url).pathname;
+const DATA_DIR = new URL("../data", import.meta.url).pathname;
 const EXTRACTION_DIR = `${DATA_DIR}/extractions`;
 
 interface SavedExtractionRecord {
@@ -66,7 +66,7 @@ applyRunId(runId);
 let payload = args[0];
 if (!payload) payload = await Bun.stdin.text();
 if (!payload?.trim()) {
-  console.error("Usage: bun run skill/adapters/board/finalize-source.ts --run-id <runId> '<JSON payload>' (or pipe via stdin)");
+  console.error("Usage: bun run skill-dev/skill-v2-lab/scripts/finalize-source.ts --run-id <runId> '<JSON payload>' (or pipe via stdin)");
   process.exit(1);
 }
 

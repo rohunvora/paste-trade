@@ -12,7 +12,7 @@
 import { join } from "path";
 import { mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from "fs";
 
-// Resolve repo root: this file is at skill/adapters/board/stream-context.ts
+// Resolve repo root: this file is at skill-dev/skill-v2-lab/scripts/stream-context.ts
 // so repo root is 3 directories up.
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const DATA_DIR = join(REPO_ROOT, "data");

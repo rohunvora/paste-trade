@@ -8,9 +8,9 @@
  * Other URLs: markdown.new → raw fetch + HTML strip.
  *
  * Usage:
- *   bun run skill/adapters/transcript/extract.ts "https://youtube.com/watch?v=xxx"
- *   bun run skill/adapters/transcript/extract.ts "https://x.com/user/status/123"
- *   bun run skill/adapters/transcript/extract.ts "https://example.com/article"
+ *   bun run skill-dev/skill-v2-lab/scripts/extract.ts "https://youtube.com/watch?v=xxx"
+ *   bun run skill-dev/skill-v2-lab/scripts/extract.ts "https://x.com/user/status/123"
+ *   bun run skill-dev/skill-v2-lab/scripts/extract.ts "https://example.com/article"
  *
  * Requires: yt-dlp (brew install yt-dlp) for YouTube
  * Optional: X_BEARER_TOKEN env var for X API (better rate limits, higher reliability)
@@ -20,7 +20,6 @@
 import { $ } from "bun";
 import { tmpdir } from "os";
 import { join } from "path";
-import { mkdirSync } from "fs";
 
 // ---------------------------------------------------------------------------
 // X API tokens (optional)
@@ -345,7 +344,7 @@ async function fetchYoutubeMeta(url: string): Promise<YoutubeMeta> {
 /** Push a streaming event if context exists. Fire-and-forget. */
 async function streamStatus(message: string): Promise<void> {
   try {
-    const { getStreamContext, pushEvent } = await import("../board/stream-context");
+    const { getStreamContext, pushEvent } = await import("./stream-context");
     const ctx = getStreamContext();
     if (ctx) pushEvent(ctx.source_id, "status", { message });
   } catch { /* streaming is optional */ }
@@ -791,6 +790,16 @@ interface ExtractedImage {
   context: string;
 }
 
+interface ArticleMetadata {
+  title?: string;
+  published_at?: string;
+  author?: string;
+  author_handle?: string;
+  author_platform?: string;
+  author_url?: string;
+  source_images?: string[];
+}
+
 /** Extract image URLs from HTML, filtering noise (tracking pixels, icons, logos) */
 function extractImagesFromHtml(html: string, baseUrl: string): ExtractedImage[] {
   const images: ExtractedImage[] = [];
@@ -862,12 +871,322 @@ function extractImagesFromMarkdown(md: string): ExtractedImage[] {
   return images;
 }
 
+function compactWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function normalizeIsoDate(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function uniqueUrls(values: Array<string | null | undefined>, baseUrl: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    if (!raw || typeof raw !== "string") continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    try {
+      const absolute = new URL(trimmed, baseUrl).href;
+      if (seen.has(absolute)) continue;
+      seen.add(absolute);
+      out.push(absolute);
+    } catch {
+      // ignore malformed URLs
+    }
+  }
+  return out;
+}
+
+function extractProfileHandle(profileUrl: string): { handle: string; platform: string; profile_url: string } | null {
+  try {
+    const parsed = new URL(profileUrl);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    const pathParts = parsed.pathname.split("/").filter(Boolean);
+    const first = pathParts[0] ?? "";
+
+    if (host === "x.com" || host === "twitter.com") {
+      if (!first || first === "i" || first === "home" || first === "search" || first === "explore") return null;
+      if (first.startsWith("@")) return { handle: first.slice(1), platform: "x", profile_url: parsed.href };
+      return { handle: first, platform: "x", profile_url: parsed.href };
+    }
+
+    if (host.includes("youtube.com")) {
+      if (!first) return null;
+      if (first.startsWith("@")) return { handle: first.slice(1), platform: "youtube", profile_url: parsed.href };
+      if (first === "channel" && pathParts[1]) {
+        return { handle: pathParts[1], platform: "youtube", profile_url: parsed.href };
+      }
+      return null;
+    }
+
+    if (host.endsWith(".substack.com")) {
+      const handle = host.slice(0, -".substack.com".length);
+      return handle ? { handle, platform: "substack", profile_url: parsed.href } : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function collectJsonLdObjects(html: string): Array<Record<string, unknown>> {
+  const objects: Array<Record<string, unknown>> = [];
+  const scriptRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = scriptRegex.exec(html)) !== null) {
+    const raw = match[1]?.trim();
+    if (!raw) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    const queue: unknown[] = Array.isArray(parsed) ? [...parsed] : [parsed];
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      objects.push(record);
+      const graph = record["@graph"];
+      if (Array.isArray(graph)) queue.push(...graph);
+    }
+  }
+  return objects;
+}
+
+function extractMetaMap(html: string): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
+  for (const tag of tags) {
+    const content = tag.match(/\bcontent=["']([^"']*)["']/i)?.[1];
+    if (!content) continue;
+    const value = compactWhitespace(decodeHtmlEntities(content));
+    if (!value) continue;
+    for (const keyType of ["name", "property", "itemprop"] as const) {
+      const key = tag.match(new RegExp(`\\b${keyType}=["']([^"']+)["']`, "i"))?.[1]?.toLowerCase();
+      if (!key) continue;
+      const existing = map.get(key) ?? [];
+      existing.push(value);
+      map.set(key, existing);
+    }
+  }
+  return map;
+}
+
+function firstMeta(meta: Map<string, string[]>, keys: string[]): string | null {
+  for (const key of keys) {
+    const values = meta.get(key.toLowerCase());
+    if (!values || values.length === 0) continue;
+    for (const value of values) {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return null;
+}
+
+function pickMarkdownTitle(md: string): string | null {
+  const lines = md.split(/\r?\n/);
+  for (const rawLine of lines.slice(0, 30)) {
+    const line = compactWhitespace(rawLine.replace(/^#+\s*/, ""));
+    if (!line) continue;
+    if (line.length < 6) continue;
+    if (line.startsWith("![")) continue;
+    return line.slice(0, 220);
+  }
+  return null;
+}
+
+function extractArticleMetadataFromHtml(
+  html: string,
+  baseUrl: string,
+  markdownText?: string,
+  images?: ExtractedImage[],
+): ArticleMetadata {
+  const meta = extractMetaMap(html);
+  const ld = collectJsonLdObjects(html);
+  const titleTag = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? null;
+  const timeTag = html.match(/<time[^>]*\bdatetime=["']([^"']+)["']/i)?.[1] ?? null;
+
+  let ldTitle: string | null = null;
+  let ldDate: string | null = null;
+  let ldAuthor: string | null = null;
+  let ldAuthorUrl: string | null = null;
+  const ldImages: string[] = [];
+
+  for (const record of ld) {
+    const rawType = record["@type"];
+    const types = Array.isArray(rawType)
+      ? rawType.filter((v): v is string => typeof v === "string").map((v) => v.toLowerCase())
+      : (typeof rawType === "string" ? [rawType.toLowerCase()] : []);
+
+    const isArticleish = types.some((t) =>
+      t.includes("article") || t.includes("posting") || t.includes("report") || t.includes("news"));
+    if (!isArticleish && types.length > 0) continue;
+
+    const headline = typeof record.headline === "string" ? compactWhitespace(record.headline) : null;
+    const name = typeof record.name === "string" ? compactWhitespace(record.name) : null;
+    if (!ldTitle) ldTitle = headline || name || null;
+
+    const published = normalizeIsoDate(record.datePublished) ?? normalizeIsoDate(record.dateCreated) ?? normalizeIsoDate(record.dateModified);
+    if (!ldDate && published) ldDate = published;
+
+    const authorValue = record.author;
+    const authorList = Array.isArray(authorValue) ? authorValue : [authorValue];
+    for (const authorEntry of authorList) {
+      if (typeof authorEntry === "string") {
+        if (!ldAuthor) ldAuthor = compactWhitespace(authorEntry);
+        continue;
+      }
+      if (!authorEntry || typeof authorEntry !== "object") continue;
+      const authorObj = authorEntry as Record<string, unknown>;
+      const authorName = typeof authorObj.name === "string" ? compactWhitespace(authorObj.name) : null;
+      if (!ldAuthor && authorName) ldAuthor = authorName;
+      const authorUrl = typeof authorObj.url === "string"
+        ? authorObj.url
+        : (typeof authorObj.sameAs === "string" ? authorObj.sameAs : null);
+      if (!ldAuthorUrl && authorUrl) ldAuthorUrl = authorUrl;
+    }
+
+    const imageValue = record.image;
+    const imageList = Array.isArray(imageValue) ? imageValue : [imageValue];
+    for (const imageEntry of imageList) {
+      if (typeof imageEntry === "string") {
+        ldImages.push(imageEntry);
+        continue;
+      }
+      if (!imageEntry || typeof imageEntry !== "object") continue;
+      const imageObj = imageEntry as Record<string, unknown>;
+      if (typeof imageObj.url === "string") ldImages.push(imageObj.url);
+    }
+  }
+
+  const title = firstMeta(meta, ["og:title", "twitter:title", "parsely-title", "title"])
+    ?? (titleTag ? compactWhitespace(decodeHtmlEntities(titleTag)) : null)
+    ?? ldTitle
+    ?? (markdownText ? pickMarkdownTitle(markdownText) : null);
+
+  const publishedAt = normalizeIsoDate(firstMeta(meta, [
+    "article:published_time",
+    "og:published_time",
+    "parsely-pub-date",
+    "publish_date",
+    "pubdate",
+    "date",
+    "dc.date",
+    "dc.date.issued",
+  ]))
+    ?? normalizeIsoDate(timeTag)
+    ?? ldDate;
+
+  const author = firstMeta(meta, ["author", "article:author", "parsely-author"])
+    ?? ldAuthor;
+  const authorUrl = ldAuthorUrl;
+
+  let authorHandle = firstMeta(meta, ["twitter:creator", "x:creator"]);
+  if (authorHandle?.startsWith("@")) authorHandle = authorHandle.slice(1);
+  let authorPlatform: string | undefined = authorHandle ? "x" : undefined;
+  let resolvedAuthorUrl = authorUrl ?? undefined;
+
+  if (!authorHandle && authorUrl) {
+    const extracted = extractProfileHandle(authorUrl);
+    if (extracted) {
+      authorHandle = extracted.handle;
+      authorPlatform = extracted.platform;
+      resolvedAuthorUrl = extracted.profile_url;
+    }
+  }
+
+  const sourceImages = uniqueUrls([
+    ...ldImages,
+    firstMeta(meta, ["og:image", "twitter:image", "twitter:image:src"]),
+    ...(images ?? []).map((image) => image.url),
+  ], baseUrl);
+
+  return {
+    ...(title ? { title } : {}),
+    ...(publishedAt ? { published_at: publishedAt } : {}),
+    ...(author ? { author } : {}),
+    ...(authorHandle ? { author_handle: authorHandle } : {}),
+    ...(authorPlatform ? { author_platform: authorPlatform } : {}),
+    ...(resolvedAuthorUrl ? { author_url: resolvedAuthorUrl } : {}),
+    ...(sourceImages.length > 0 ? { source_images: sourceImages } : {}),
+  };
+}
+
+async function fetchArticleMetadata(url: string): Promise<ArticleMetadata | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        Accept: "text/html,application/xhtml+xml,*/*",
+      },
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    const body = await res.text();
+    if (!body || body.length < 50) return null;
+    const looksLikeHtml = /<html|<meta|<title|<script/i.test(body);
+    if (!looksLikeHtml) return null;
+    return extractArticleMetadataFromHtml(body, url);
+  } catch {
+    return null;
+  }
+}
+
+function buildArticlePayload(
+  source: "markdown.new" | "text",
+  url: string,
+  text: string,
+  images: ExtractedImage[],
+  metadata?: ArticleMetadata | null,
+): string {
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const sourceImages = uniqueUrls([
+    ...(metadata?.source_images ?? []),
+    ...images.map((image) => image.url),
+  ], url);
+
+  return JSON.stringify({
+    source,
+    url,
+    word_count: wordCount,
+    text: text.slice(0, 50000),
+    ...(metadata?.title ? { title: metadata.title } : {}),
+    ...(metadata?.published_at ? { published_at: metadata.published_at } : {}),
+    ...(metadata?.author ? { author: metadata.author } : {}),
+    ...(metadata?.author_handle ? { author_handle: metadata.author_handle } : {}),
+    ...(metadata?.author_platform ? { author_platform: metadata.author_platform } : {}),
+    ...(metadata?.author_url ? { author_url: metadata.author_url } : {}),
+    ...(images.length > 0 ? { images } : {}),
+    ...(sourceImages.length > 0 ? { source_images: sourceImages } : {}),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Generic text extraction (articles, blogs)
 // ---------------------------------------------------------------------------
 
 async function extractText(url: string): Promise<string> {
   streamStatus("Extracting article...");
+  const metadataPromise = fetchArticleMetadata(url);
+
   // Try markdown.new first (clean article extraction, handles JS-rendered pages)
   try {
     const mdRes = await fetch(`https://markdown.new/${url}`, {
@@ -876,14 +1195,12 @@ async function extractText(url: string): Promise<string> {
     if (mdRes.ok) {
       const md = (await mdRes.text()).trim();
       if (md.length > 100) {
-        const wordCount = md.split(/\s+/).length;
         const images = extractImagesFromMarkdown(md);
-        console.error(`  markdown.new: ${wordCount} words, ${images.length} images extracted`);
-        return JSON.stringify({
-          source: "markdown.new", url, word_count: wordCount,
-          text: md.slice(0, 50000),
-          ...(images.length > 0 ? { images } : {}),
-        });
+        const metadata = await metadataPromise;
+        const payload = buildArticlePayload("markdown.new", url, md, images, metadata);
+        const parsed = JSON.parse(payload) as { word_count?: number };
+        console.error(`  markdown.new: ${parsed.word_count ?? 0} words, ${images.length} images extracted`);
+        return payload;
       }
     }
   } catch {
@@ -907,6 +1224,7 @@ async function extractText(url: string): Promise<string> {
 
   // Extract images before stripping HTML
   const images = extractImagesFromHtml(html, url);
+  const htmlMetadata = extractArticleMetadataFromHtml(html, url, undefined, images);
 
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -917,13 +1235,10 @@ async function extractText(url: string): Promise<string> {
     .replace(/\s+/g, " ")
     .trim();
 
-  const wordCount = text.split(/\s+/).length;
-  console.error(`  raw fetch: ${wordCount} words, ${images.length} images extracted`);
-  return JSON.stringify({
-    source: "text", url, word_count: wordCount,
-    text: text.slice(0, 50000),
-    ...(images.length > 0 ? { images } : {}),
-  });
+  const payload = buildArticlePayload("text", url, text, images, htmlMetadata);
+  const parsed = JSON.parse(payload) as { word_count?: number };
+  console.error(`  raw fetch: ${parsed.word_count ?? 0} words, ${images.length} images extracted`);
+  return payload;
 }
 
 // ---------------------------------------------------------------------------
@@ -934,7 +1249,7 @@ async function main() {
   const url = process.argv[2];
   if (!url) {
     console.error(
-      "Usage: bun run skill/adapters/transcript/extract.ts <url>"
+      "Usage: bun run skill-dev/skill-v2-lab/scripts/extract.ts <url>"
     );
     process.exit(1);
   }
@@ -955,8 +1270,7 @@ async function main() {
     const parsed = JSON.parse(result);
     if (!parsed.error) {
       const hash = new Bun.CryptoHasher("sha256").update(url).digest("hex").slice(0, 12);
-      const dir = join(import.meta.dir, "../../../data/sources");
-      mkdirSync(dir, { recursive: true });
+      const dir = join(import.meta.dir, "../data/sources");
       const filePath = join(dir, `source-${hash}.json`);
       parsed.saved_to = filePath;
       await Bun.write(filePath, JSON.stringify(parsed));

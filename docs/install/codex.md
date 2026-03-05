@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a codex
+npx skills add rohunvora/paste-trade-skill@v2 -a codex
 ```
 
 ## Verify
@@ -29,4 +29,4 @@ npx skills add rohunvora/paste-trade-skill@latest -a codex
 ## Account portability
 
 - Preferred: reuse one `PASTE_TRADE_KEY` across clients.
-- Fallback if keys are split: run `bun run skill/adapters/board/connect.ts` from the account you want to keep.
+- Fallback if keys are split: run `bun run scripts/connect.ts` from the account you want to keep.

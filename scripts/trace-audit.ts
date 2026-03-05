@@ -7,9 +7,9 @@ const MAX_TRACE_STRING_CHARS = 300;
 
 const DEFAULT_TRACE_LOG_PATH = path.join(
   os.homedir(),
-  ".paste-trade",
+  ".openclaw",
   "logs",
-  "trade-runtime.audit.log",
+  "trade-slash-wrapper.audit.log",
 );
 
 function sanitizeTraceString(value: unknown): string {

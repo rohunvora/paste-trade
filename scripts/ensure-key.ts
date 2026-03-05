@@ -86,7 +86,7 @@ export async function ensureKey(): Promise<string | null> {
 function findEnvPaths(): string[] {
   const paths: string[] = [];
 
-  // 1. Repo root (relative to this file: board/ -> adapters/ -> skill/ -> repo root)
+  // 1. Repo root (relative to this file: scripts/ -> skill-v2-lab/ -> skill-dev/ -> repo root)
   paths.push(join(import.meta.dir, "..", "..", "..", ".env"));
 
   // 2. Git root (handles cases where cwd differs from repo root)

@@ -1,13 +1,14 @@
 /**
- * Core types for paste.trade /trade adapters.
- * Every adapter returns TradeExpression objects with the same shape.
+ * Core types for the Belief Router skill.
+ * Every adapter produces TradeExpression objects with the same shape,
+ * enabling cross-platform comparison.
  */
 
-export type Platform = "hyperliquid" | "kalshi" | "robinhood" | "bankr" | "angel" | "polymarket";
+export type Platform = "hyperliquid" | "robinhood" | "polymarket";
 export type Direction = "long" | "short" | "yes" | "no";
 export type Liquidity = "high" | "medium" | "low";
 export type ThesisDirection = "bullish" | "bearish" | "neutral";
-export type PlatformRiskTier = "regulated" | "dex" | "new";  // Kalshi=regulated, Hyperliquid=dex, Bankr=new
+export type PlatformRiskTier = "regulated" | "dex";
 
 /** Parsed thesis from natural language input */
 export interface ParsedThesis {
@@ -34,7 +35,7 @@ export interface TradeExpression {
   // Context
   time_horizon: string;           // "by March 18, 2026", "3-6 months"
   leverage: number;               // 1x spot, 5x perp, binary = effectively infinite
-  market_implied_prob?: number;   // From Kalshi/Polymarket price, or estimated
+  market_implied_prob?: number;   // From Polymarket price, or estimated
   liquidity: Liquidity;
 
   // The ranking metric: expected return per month per $100
@@ -91,10 +92,7 @@ export interface TradeTarget {
 
 /** Platform risk metadata — surfaced on every card */
 export const PLATFORM_RISK: Record<Platform, { tier: PlatformRiskTier; note: string }> = {
-  kalshi: { tier: "regulated", note: "CFTC-regulated DCM, segregated accounts" },
   robinhood: { tier: "regulated", note: "FINRA/SEC regulated broker-dealer" },
   hyperliquid: { tier: "dex", note: "DEX on Arbitrum — 3 withdrawal freezes in 2025 (JELLY, July, POPCAT)" },
-  bankr: { tier: "new", note: "Non-custodial, alpha-stage SDK, limited track record" },
-  angel: { tier: "new", note: "Private market -- illiquid, 5-7yr lockup, binary outcomes" },
   polymarket: { tier: "dex", note: "Crypto-native prediction market on Polygon, no CFTC regulation" },
 };

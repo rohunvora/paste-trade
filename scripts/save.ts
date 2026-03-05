@@ -3,21 +3,22 @@
  * Extraction Store — saves and updates thesis objects.
  *
  * Save (extraction): appends new thesis to JSONL.
- *   bun run skill/adapters/extraction/save.ts '<thesis JSON>'
+ *   bun run skill-dev/skill-v2-lab/scripts/save.ts '<thesis JSON>'
+ *   cat thesis.json | bun run skill-dev/skill-v2-lab/scripts/save.ts --stdin
  *
  * Update (routing): merges new fields into existing record by ID.
- *   bun run skill/adapters/extraction/save.ts --update <id> '<partial JSON>'
+ *   bun run skill-dev/skill-v2-lab/scripts/save.ts --update <id> '<partial JSON>'
  *   Merges top-level fields. Nested objects are shallow-merged.
  */
 
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync } from "fs";
 import { normalizeRouteStatus, validate, type ThesisObject } from "./validate";
-import { applyRunId, extractRunIdArg } from "../board/run-id";
-import { appendTraceEvent, hashForTrace } from "../board/trace-audit";
+import { applyRunId, extractRunIdArg } from "./run-id";
+import { appendTraceEvent, hashForTrace } from "./trace-audit";
 import { countRunExtractions } from "./run-count";
 
-const DATA_DIR = new URL("../../../data", import.meta.url).pathname;
+const DATA_DIR = new URL("../data", import.meta.url).pathname;
 const EXTRACTION_DIR = `${DATA_DIR}/extractions`;
 const { runId, args } = extractRunIdArg(process.argv);
 applyRunId(runId);
@@ -141,7 +142,8 @@ async function main() {
   }
 
   // Read input from arg or stdin
-  let raw = args[0];
+  const explicitStdin = args[0] === "--stdin";
+  let raw = explicitStdin ? undefined : args[0];
   if (!raw) {
     raw = await Bun.stdin.text();
   }
@@ -205,7 +207,7 @@ async function main() {
 
   // Auto-push thesis_found event if streaming context exists
   try {
-    const { getStreamContext, incrementThesisCount, pushEvent } = await import("../board/stream-context");
+    const { getStreamContext, incrementThesisCount, pushEvent } = await import("./stream-context");
     const ctx = getStreamContext(runId);
     if (ctx) {
       const sessionCount = incrementThesisCount(runId);

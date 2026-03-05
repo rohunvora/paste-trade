@@ -3,7 +3,7 @@
  * Returns the source_id and source_url for live processing.
  *
  * Usage:
- *   bun run skill/adapters/board/create-source.ts '<JSON payload>'
+ *   bun run skill-dev/skill-v2-lab/scripts/create-source.ts '<JSON payload>'
  *
  * Payload: { url, title, platform, source_date, author_handle, source_images,
  *           word_count?, duration_seconds?, speakers_count? }
@@ -15,7 +15,7 @@
 
 const payload = process.argv[2];
 if (!payload) {
-  console.error("Usage: bun run skill/adapters/board/create-source.ts '<JSON payload>'");
+  console.error("Usage: bun run skill-dev/skill-v2-lab/scripts/create-source.ts '<JSON payload>'");
   process.exit(1);
 }
 
@@ -70,7 +70,7 @@ if (!res.ok) {
   process.exit(1);
 }
 
-// Write stream context so other adapters (save.ts, post.ts, assess.ts)
+// Write stream context so other adapters (save.ts, post.ts, route-check.ts)
 // can automatically push live status events to the source page.
 // Each run gets a unique UUID to prevent parallel-run context corruption.
 try {

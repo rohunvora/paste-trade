@@ -92,6 +92,11 @@ function normalizeLabel(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function normalizeText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 export function validate(
   obj: unknown,
   options?: { requireRouteEvidence?: boolean },
@@ -273,14 +278,30 @@ export function validate(
     }
   }
 
+  const normalizedQuoteSet = new Set<string>();
   if (!Array.isArray(t.quotes) || t.quotes.length === 0) {
     errors.push("Missing or empty 'quotes' array");
+  } else {
+    for (let i = 0; i < t.quotes.length; i++) {
+      const quote = t.quotes[i];
+      if (typeof quote !== "string" || !quote.trim()) {
+        errors.push(`quotes[${i}]: must be a non-empty string`);
+        continue;
+      }
+      normalizedQuoteSet.add(normalizeText(quote));
+    }
   }
 
   if (typeof t.headline !== "string" || !t.headline.trim()) {
     errors.push("Missing or empty 'headline' field");
-  } else if (t.headline.length > 150) {
-    errors.push(`headline is ${t.headline.length} chars (target: 120, hard limit: 150)`);
+  } else {
+    if (t.headline.length > 180) {
+      errors.push(`headline is ${t.headline.length} chars (max: 180)`);
+    }
+    const normalizedHeadline = normalizeText(t.headline);
+    if (normalizedQuoteSet.size > 0 && normalizedHeadline && !normalizedQuoteSet.has(normalizedHeadline)) {
+      errors.push("headline must exactly match one quotes[] entry");
+    }
   }
 
   return { valid: errors.length === 0, errors };

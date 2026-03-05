@@ -2,7 +2,7 @@
  * Shared helpers for edit-mode adapter scripts.
  */
 
-import { ensureKey, getBaseUrl } from "../board/ensure-key";
+import { ensureKey, getBaseUrl } from "./ensure-key";
 
 export async function getAuthedBase(): Promise<{ baseUrl: string; headers: Record<string, string> }> {
   const baseUrl = getBaseUrl();

@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 
-const DATA_DIR = new URL("../../../data", import.meta.url).pathname;
+const DATA_DIR = new URL("../data", import.meta.url).pathname;
 const DEFAULT_EXTRACTION_DIR = `${DATA_DIR}/extractions`;
 
 interface RunCountOptions {

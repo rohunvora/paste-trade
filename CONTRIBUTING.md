@@ -8,7 +8,8 @@ Keep this repository limited to public install-critical assets for `/trade`.
 
 ## Include
 
-- runtime files required for `/trade`
+- runtime scripts required for `/trade` (`scripts/`)
+- instrument discovery adapters (`adapters/`)
 - OpenClaw wrapper/plugin files required for `/trade` dispatch
 - concise public docs for install, update, and operations
 
@@ -25,17 +26,15 @@ Keep this repository limited to public install-critical assets for `/trade`.
 - [ ] `/trade` runtime path still coherent (extract -> route -> post -> finalize)
 - [ ] OpenClaw wrapper dependency remains explicit and documented
 - [ ] install/update commands remain accurate for all supported clients
-- [ ] no legacy pre-migration naming in user-facing docs
 - [ ] no secrets/private URLs in committed files
-- [ ] `CHANGELOG.md` updated for every user-visible or runtime-behavior change (under `Unreleased` until release)
+- [ ] `CHANGELOG.md` updated for every user-visible or runtime-behavior change
 
 ## Runtime Non-Negotiables
 
 1. Keep command name `/trade` unchanged.
 2. Keep public naming as `paste.trade` / `paste-trade-skill`.
-3. Do not add user-facing legacy naming.
-4. Do not commit secrets.
-5. Do not make OpenClaw wrapper setup implicit.
+3. Do not commit secrets.
+4. Do not make OpenClaw wrapper setup implicit.
 
 ## Install and Update Consistency
 
@@ -49,11 +48,3 @@ If OpenClaw wrapper behavior changes, update:
 - `docs/install/openclaw.md`
 - `README.md`
 - `scripts/setup-openclaw-wrapper.sh` (if needed)
-
-## Validation
-
-Run the checks you can from this repo and include results in PR notes.
-At minimum:
-- syntax checks for shell scripts
-- runtime import/path sanity checks
-- grep scan for obvious secret leakage
