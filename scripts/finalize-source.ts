@@ -2,8 +2,8 @@
  * Explicitly finalize a source processing run.
  *
  * Usage:
- *   echo '{ "source_id": "...", "source_theses": [...], "source_summary": "...", "message": "All trades posted" }' | bun run skill-dev/skill-v2-lab/scripts/finalize-source.ts --run-id <runId>
- *   bun run skill-dev/skill-v2-lab/scripts/finalize-source.ts --run-id <runId> '{ "source_id": "...", "source_theses": [...] }'
+ *   echo '{ "source_id": "...", "source_theses": [...], "source_summary": "...", "message": "All trades posted" }' | bun run skill/scripts/finalize-source.ts --run-id <runId>
+ *   bun run skill/scripts/finalize-source.ts --run-id <runId> '{ "source_id": "...", "source_theses": [...] }'
  */
 
 import { existsSync } from "fs";
@@ -11,14 +11,14 @@ import { applyRunId, extractRunIdArg } from "./run-id";
 import { clearStreamContext, pushEvent } from "./stream-context";
 import { appendTraceEvent, hashForTrace } from "./trace-audit";
 import { normalizeRouteStatus } from "./validate";
+import { getRuntimeExtractionDir } from "./runtime-paths";
 
-const DATA_DIR = new URL("../data", import.meta.url).pathname;
-const EXTRACTION_DIR = `${DATA_DIR}/extractions`;
+const EXTRACTION_DIR = getRuntimeExtractionDir();
 
 interface SavedExtractionRecord {
   id: string;
   thesis?: string;
-  headline?: string;
+  headline_quote?: string;
   run_id?: string;
 }
 
@@ -30,7 +30,7 @@ function resolveThesisRef(entry: Record<string, unknown>): string | null {
 }
 
 function summarizeRecord(record: SavedExtractionRecord): string {
-  const headline = typeof record.headline === "string" ? record.headline.trim() : "";
+  const headline = typeof record.headline_quote === "string" ? record.headline_quote.trim() : "";
   if (headline) return headline;
   const thesis = typeof record.thesis === "string" ? record.thesis.trim() : "";
   return thesis.slice(0, 120) || "<no thesis text>";
@@ -66,7 +66,7 @@ applyRunId(runId);
 let payload = args[0];
 if (!payload) payload = await Bun.stdin.text();
 if (!payload?.trim()) {
-  console.error("Usage: bun run skill-dev/skill-v2-lab/scripts/finalize-source.ts --run-id <runId> '<JSON payload>' (or pipe via stdin)");
+  console.error("Usage: bun run skill/scripts/finalize-source.ts --run-id <runId> '<JSON payload>' (or pipe via stdin)");
   process.exit(1);
 }
 
@@ -182,7 +182,8 @@ appendTraceEvent({
   completionMessageLength: typeof body.message === "string" ? body.message.length : 0,
 });
 
-const ok = await pushEvent(body.source_id, "complete", {
+// Emit done event (v2 only — backend handles both done and complete identically)
+const ok = await pushEvent(body.source_id, "done", {
   message: body.message ?? "All trades posted",
   source_theses: body.source_theses,
   source_summary: typeof body.source_summary === "string" ? body.source_summary : undefined,

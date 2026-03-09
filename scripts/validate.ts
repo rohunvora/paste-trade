@@ -20,7 +20,7 @@ export interface ThesisObject {
   who?: ThesisWho[];
   why: (string | WhyCitation)[];
   quotes: string[];
-  headline: string;
+  headline_quote: string;
   route_status?: "routed" | "unrouted";
   routed?: boolean;
   unrouted_reason?: string;
@@ -82,6 +82,12 @@ export function normalizeRouteStatus(t: Record<string, unknown>): "routed" | "un
   if (raw === "routed" || raw === "unrouted") return raw;
   if (typeof t.routed === "boolean") return t.routed ? "routed" : "unrouted";
   return null;
+}
+
+/** Strip venue/dex prefix from HL-style tickers like "xyz:NVDA" -> "NVDA" */
+function stripVenuePrefix(ticker: string): string {
+  const idx = ticker.indexOf(":");
+  return idx === -1 ? ticker : ticker.slice(idx + 1);
 }
 
 function normalizeToken(value: unknown): string {
@@ -224,7 +230,7 @@ export function validate(
           }
         }
 
-        if (selectedTicker && whoTickers.size > 0 && !whoTickers.has(selectedTicker)) {
+        if (selectedTicker && whoTickers.size > 0 && !whoTickers.has(selectedTicker) && !whoTickers.has(stripVenuePrefix(selectedTicker))) {
           errors.push("route_evidence.selected_expression.ticker must match one of who[].ticker");
         }
 
@@ -235,7 +241,7 @@ export function validate(
           errors.push("route_evidence.fallback_reason_tag is invalid");
         }
 
-        const isProxySelection = selectedTicker && !directTickers.has(selectedTicker);
+        const isProxySelection = selectedTicker && !directTickers.has(selectedTicker) && !directTickers.has(stripVenuePrefix(selectedTicker));
         if (isProxySelection && !hasFallbackTag) {
           errors.push("Proxy route requires route_evidence.fallback_reason_tag");
         }
@@ -292,15 +298,20 @@ export function validate(
     }
   }
 
-  if (typeof t.headline !== "string" || !t.headline.trim()) {
-    errors.push("Missing or empty 'headline' field");
+  if (typeof t.headline_quote !== "string" || !t.headline_quote.trim()) {
+    errors.push("Missing or empty 'headline_quote' field");
   } else {
-    if (t.headline.length > 180) {
-      errors.push(`headline is ${t.headline.length} chars (max: 180)`);
+    if (t.headline_quote.length > 180) {
+      errors.push(`headline_quote is ${t.headline_quote.length} chars (max: 180)`);
     }
-    const normalizedHeadline = normalizeText(t.headline);
-    if (normalizedQuoteSet.size > 0 && normalizedHeadline && !normalizedQuoteSet.has(normalizedHeadline)) {
-      errors.push("headline must exactly match one quotes[] entry");
+    const normalizedHeadline = normalizeText(t.headline_quote);
+    if (normalizedQuoteSet.size > 0 && normalizedHeadline) {
+      // Accept exact match or substring of any quote (headline is a <=120 char excerpt)
+      const exactMatch = normalizedQuoteSet.has(normalizedHeadline);
+      const substringMatch = !exactMatch && [...normalizedQuoteSet].some(q => q.includes(normalizedHeadline));
+      if (!exactMatch && !substringMatch) {
+        errors.push("headline_quote must match or be a substring of one quotes[] entry");
+      }
     }
   }
 

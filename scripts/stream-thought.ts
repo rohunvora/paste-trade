@@ -3,7 +3,7 @@
  * The model calls this once before save.ts to share its 1st pass analysis.
  *
  * Usage:
- *   bun run skill-dev/skill-v2-lab/scripts/stream-thought.ts --run-id <runId> "Found 4 theses: oil supply risk, gold safe haven, defense rally, Israel posture"
+ *   bun run skill/scripts/stream-thought.ts --run-id <runId> "Found 4 theses: oil supply risk, gold safe haven, defense rally, Israel posture"
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
@@ -14,7 +14,7 @@ applyRunId(runId);
 
 const message = args[0];
 if (!message) {
-  console.error("Usage: bun run skill-dev/skill-v2-lab/scripts/stream-thought.ts --run-id <runId> '<message>'");
+  console.error("Usage: bun run skill/scripts/stream-thought.ts --run-id <runId> '<message>'");
   process.exit(1);
 }
 
@@ -24,7 +24,7 @@ if (!ctx) {
   process.exit(0);
 }
 
-const ok = await pushEvent(ctx.source_id, "status", { message }, { runId });
+const ok = await pushEvent(ctx.source_id, "thought", { message }, { runId });
 if (!ok) {
   console.error("[stream-thought] Failed to push status event");
 }

@@ -11,11 +11,10 @@
 
 import { join } from "path";
 import { mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from "fs";
+import { getRuntimeDataDir } from "./runtime-paths";
+import { getBaseUrl, loadKey } from "./ensure-key";
 
-// Resolve repo root: this file is at skill-dev/skill-v2-lab/scripts/stream-context.ts
-// so repo root is 3 directories up.
-const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
-const DATA_DIR = join(REPO_ROOT, "data");
+const DATA_DIR = getRuntimeDataDir();
 const CONTEXT_PREFIX = ".stream-context-";
 
 import { RUN_ID_ENV } from "./run-id";
@@ -104,16 +103,6 @@ export function cleanupStaleContextFiles(maxAgeMs = 20 * 60 * 1000): number {
   return cleaned;
 }
 
-/** Load a key from the repo .env file directly (doesn't depend on cwd). */
-function loadEnvKey(key: string): string | undefined {
-  if (process.env[key]) return process.env[key];
-  try {
-    const text = readFileSync(join(REPO_ROOT, ".env"), "utf8");
-    const match = text.match(new RegExp(`^${key}=(.+)$`, "m"));
-    return match?.[1]?.trim();
-  } catch { return undefined; }
-}
-
 /** Push an event to the API and return whether it succeeded.
  *  Includes run_id in the event data for traceability. */
 export async function pushEvent(
@@ -125,8 +114,8 @@ export async function pushEvent(
   const runId = opts?.runId ?? process.env[RUN_ID_ENV] ?? null;
   const eventData = runId ? { ...data, run_id: runId } : data;
 
-  const baseUrl = loadEnvKey("PASTE_TRADE_URL") || loadEnvKey("BOARD_URL") || loadEnvKey("BELIEF_BOARD_URL") || "https://paste.trade";
-  const apiKey = loadEnvKey("PASTE_TRADE_KEY");
+  const baseUrl = getBaseUrl();
+  const apiKey = loadKey("PASTE_TRADE_KEY");
   const url = `${baseUrl}/api/sources/${sourceId}/events`;
   const requestBody = JSON.stringify({ event_type: eventType, data: eventData });
   try {

@@ -6,7 +6,7 @@
 2. If direct is unavailable, use a proxy only with explicit reasoning.
 3. Keep route decisions consistent with saved thesis evidence.
 
-## Route-Check Output
+## Route Output
 
 - `executable`: whether a trade expression is available.
 - `selected_expression`: the chosen instrument/platform/ticker.

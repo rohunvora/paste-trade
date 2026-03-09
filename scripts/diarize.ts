@@ -9,16 +9,18 @@
  *   upload and diarize all chunks in parallel, merge results.
  *
  * Usage:
- *   bun run skill-dev/skill-v2-lab/scripts/diarize.ts "https://youtube.com/watch?v=xxx"
+ *   bun run skill/scripts/diarize.ts "https://youtube.com/watch?v=xxx"
  *
  * Requires: GEMINI_API_KEY env var, yt-dlp, ffmpeg
  * Cost: ~$0.14/hour (Flash), ~$0.26/hour (Pro)
  */
 
 import { $ } from "bun";
+import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { unlink, readdir } from "node:fs/promises";
+import { getRuntimeSourceDir, readEnvValue } from "./runtime-paths";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -34,15 +36,7 @@ const OVERLAP_SEC = 30; // 30s overlap between chunks for speaker continuity
 const SHORT_THRESHOLD_SEC = 50 * 60; // below 50 min, don't chunk
 
 function loadGeminiKey(): string | undefined {
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
-  try {
-    const envFile = Bun.file(`${import.meta.dir}/../../../.env`);
-    const text = envFile.textSync?.() ?? require("fs").readFileSync(envFile.name!, "utf-8");
-    const match = text.match(/^GEMINI_API_KEY=(.+)$/m);
-    return match?.[1]?.trim();
-  } catch {
-    return undefined;
-  }
+  return readEnvValue("GEMINI_API_KEY");
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +196,17 @@ async function splitAudio(filePath: string, durationSec: number): Promise<Chunk[
     index++;
   }
 
+  // Absorb degenerate final chunk (< 60s) into the previous chunk
+  if (chunks.length > 1) {
+    const lastChunk = chunks[chunks.length - 1];
+    const lastChunkDuration = durationSec - lastChunk.startSec;
+    if (lastChunkDuration < 60) {
+      const removed = chunks.pop()!;
+      try { await unlink(removed.path); } catch {}
+      console.error(`[diarize] Absorbed ${lastChunkDuration}s final chunk into previous`);
+    }
+  }
+
   console.error(`[diarize] Split into ${chunks.length} chunks (${CHUNK_DURATION_SEC / 60}min each, ${OVERLAP_SEC}s overlap)`);
   return chunks;
 }
@@ -321,6 +326,7 @@ async function diarizeOneFile(
         generationConfig: {
           temperature: 0.1,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 }, // transcription is mechanical, no reasoning needed
         },
       }),
     }
@@ -477,7 +483,7 @@ async function processAudio(
 async function main() {
   const url = process.argv[2];
   if (!url) {
-    console.error("Usage: bun run skill-dev/skill-v2-lab/scripts/diarize.ts <url>");
+    console.error("Usage: bun run skill/scripts/diarize.ts <url>");
     process.exit(1);
   }
 
@@ -506,6 +512,17 @@ async function main() {
     process.exit(0);
   }
 
+  // Emit enriching event for streaming progress (fills the dead zone during diarization)
+  try {
+    const { getStreamContext, pushEvent } = await import("./stream-context");
+    const ctx = getStreamContext();
+    if (ctx) {
+      await pushEvent(ctx.source_id, "enriching", {
+        step: "diarizing",
+      }, { runId: ctx.run_id });
+    }
+  } catch (e) { console.error("[diarize] streaming event failed:", e); }
+
   console.error(`[diarize] Processing: ${url}`);
   console.error(`[diarize] Model: ${GEMINI_MODEL}`);
 
@@ -530,7 +547,8 @@ async function main() {
     if (ytMeta.channelHandle) parsed.channel_handle = ytMeta.channelHandle;
     if (ytMeta.channelUrl) parsed.channel_url = ytMeta.channelUrl;
     const hash = new Bun.CryptoHasher("sha256").update(url).digest("hex").slice(0, 12);
-    const dir = join(import.meta.dir, "../data/sources");
+    const dir = getRuntimeSourceDir();
+    mkdirSync(dir, { recursive: true });
     // Separate path from extract.ts — no shared mutable artifact
     const filePath = join(dir, `source-${hash}.diarized.json`);
     parsed.saved_to = filePath;

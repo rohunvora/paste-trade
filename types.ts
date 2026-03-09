@@ -72,7 +72,7 @@ export interface TrackedTrade {
   thesis: string;                 // Original belief text — the headline
   thesis_timestamp: string;       // ISO date when belief was stated
   expression: TradeExpression;    // What they picked
-  entry_price: number;
+  publish_price: number;
   entry_date: string;             // ISO date
   current_price?: number;
   pnl_pct?: number;

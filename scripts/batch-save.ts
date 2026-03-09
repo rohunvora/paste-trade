@@ -4,7 +4,7 @@
  * Pushes thesis_found events with staggered delays for progressive reveal.
  *
  * Usage:
- *   echo '[{thesis1}, {thesis2}, ...]' | bun run skill-dev/skill-v2-lab/scripts/batch-save.ts
+ *   echo '[{thesis1}, {thesis2}, ...]' | bun run skill/scripts/batch-save.ts
  *
  * Returns: [{ "id": "be5378b3", "index": 0 }, { "id": "a91c44d2", "index": 1 }, ...]
  *
@@ -17,9 +17,9 @@ import { normalizeRouteStatus, validate, type ThesisObject } from "./validate";
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { appendTraceEvent, hashForTrace } from "./trace-audit";
 import { countRunExtractions } from "./run-count";
+import { getRuntimeExtractionDir } from "./runtime-paths";
 
-const DATA_DIR = new URL("../data", import.meta.url).pathname;
-const EXTRACTION_DIR = `${DATA_DIR}/extractions`;
+const EXTRACTION_DIR = getRuntimeExtractionDir();
 const STAGGER_MS = 800;
 const { runId } = extractRunIdArg(process.argv);
 applyRunId(runId);
@@ -132,7 +132,7 @@ async function main() {
           message: thesis.thesis,
           thesis_id: results[i].id,
           thesis: thesis.thesis,
-          headline: thesis.headline,
+          headline_quote: thesis.headline_quote,
           who: Array.isArray(thesis.who) ? thesis.who : [],
           route_status: routeStatus ?? undefined,
           unrouted_reason: typeof thesis.unrouted_reason === "string" ? thesis.unrouted_reason : undefined,

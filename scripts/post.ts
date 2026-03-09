@@ -6,13 +6,14 @@
  * that break shell quoting).
  *
  * Usage:
- *   bun run skill-dev/skill-v2-lab/scripts/post.ts '<JSON payload>'
- *   echo '<JSON>' | bun run skill-dev/skill-v2-lab/scripts/post.ts
+ *   bun run skill/scripts/post.ts '<JSON payload>'
+ *   echo '<JSON>' | bun run skill/scripts/post.ts
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { appendTraceEvent, hashForTrace } from "./trace-audit";
 import { existsSync } from "fs";
+import { getRuntimeExtractionDir, getUserStateDir } from "./runtime-paths";
 
 const { runId, args } = extractRunIdArg(process.argv);
 applyRunId(runId);
@@ -23,7 +24,7 @@ if (!payload) {
   payload = await Bun.stdin.text();
 }
 if (!payload?.trim()) {
-  console.error("Usage: bun run skill-dev/skill-v2-lab/scripts/post.ts '<JSON payload>' (or pipe via stdin)");
+  console.error("Usage: bun run skill/scripts/post.ts '<JSON payload>' (or pipe via stdin)");
   process.exit(1);
 }
 payload = payload.trim();
@@ -59,6 +60,12 @@ function normalizeTicker(value: unknown): string {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
 
+/** Strip venue/dex prefix from HL-style tickers like "xyz:NVDA" -> "NVDA" */
+function stripVenuePrefix(ticker: string): string {
+  const idx = ticker.indexOf(":");
+  return idx === -1 ? ticker : ticker.slice(idx + 1);
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -66,6 +73,13 @@ function toFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function applyCanonicalPublishPrice(tradeBody: Record<string, unknown>): void {
+  const sourceDatePrice = toFiniteNumber(tradeBody.source_date_price);
+  if (sourceDatePrice != null && sourceDatePrice > 0) {
+    tradeBody.publish_price = sourceDatePrice;
+  }
 }
 
 function normalizeIsoDateTime(value: unknown): string | null {
@@ -90,7 +104,7 @@ const FALLBACK_REASON_TAGS = new Set([
 ]);
 
 async function loadExtractionById(runIdValue: string, thesisId: string): Promise<SavedExtractionRecord | null> {
-  const extractionDir = new URL("../data/extractions", import.meta.url).pathname;
+  const extractionDir = getRuntimeExtractionDir();
   if (!existsSync(extractionDir)) return null;
   const files = (await Array.fromAsync(new Bun.Glob("extraction-*.jsonl").scan(extractionDir)))
     .map((file) => `${extractionDir}/${file}`)
@@ -182,8 +196,8 @@ function hydratePayloadFromSavedExtraction(
   if (normalizedSourceDate) tradeBody.source_date = normalizedSourceDate;
 
   if (typeof tradeBody.headline_quote !== "string" || !tradeBody.headline_quote.trim()) {
-    if (typeof extracted.headline === "string" && extracted.headline.trim()) {
-      tradeBody.headline_quote = extracted.headline.trim();
+    if (typeof extracted.headline_quote === "string" && extracted.headline_quote.trim()) {
+      tradeBody.headline_quote = extracted.headline_quote.trim();
     } else if (Array.isArray(extracted.quotes)) {
       const firstQuote = extracted.quotes.find((q) => typeof q === "string" && q.trim());
       if (typeof firstQuote === "string" && firstQuote.trim()) {
@@ -193,11 +207,11 @@ function hydratePayloadFromSavedExtraction(
   }
 
   const check = resolveDirectCheckForTicker(extracted, normalizeTicker(tradeBody.ticker));
-  const selectedEntryPrice = toFiniteNumber(selected?.entry_price);
-  const checkEntryPrice = toFiniteNumber(check?.entry_price);
-  if (toFiniteNumber(tradeBody.entry_price) == null) {
+  const selectedEntryPrice = toFiniteNumber(selected?.publish_price);
+  const checkEntryPrice = toFiniteNumber(check?.publish_price);
+  if (toFiniteNumber(tradeBody.publish_price) == null) {
     const candidateEntry = selectedEntryPrice ?? checkEntryPrice;
-    if (candidateEntry != null && candidateEntry > 0) tradeBody.entry_price = candidateEntry;
+    if (candidateEntry != null && candidateEntry > 0) tradeBody.publish_price = candidateEntry;
   }
 
   const selectedSourceDatePrice = toFiniteNumber(selected?.source_date_price);
@@ -294,10 +308,8 @@ async function validatePayloadAgainstSavedExtraction(
   const extractedRouteStatus = normalizeRouteStatus(extracted);
   if (extractedRouteStatus === "routed") {
     if (!extracted.route_evidence || typeof extracted.route_evidence !== "object" || Array.isArray(extracted.route_evidence)) {
-      console.error(
-        `[board] routed thesis ${thesisId} is missing route_evidence. Refusing POST.`,
-      );
-      process.exit(1);
+      console.log(JSON.stringify({ ok: false, error: `routed thesis ${thesisId} is missing route_evidence` }));
+      process.exit(0);
     }
 
     const routeEvidence = extracted.route_evidence as Record<string, unknown>;
@@ -308,29 +320,23 @@ async function validatePayloadAgainstSavedExtraction(
         ? (routeEvidence.selected_expression as Record<string, unknown>)
         : null;
     if (!selectedExpression) {
-      console.error(
-        `[board] routed thesis ${thesisId} is missing route_evidence.selected_expression. Refusing POST.`,
-      );
-      process.exit(1);
+      console.log(JSON.stringify({ ok: false, error: `routed thesis ${thesisId} is missing route_evidence.selected_expression` }));
+      process.exit(0);
     }
 
     const selectedTicker = normalizeTicker(selectedExpression.ticker);
     const postedTicker = normalizeTicker(tradeBody.ticker);
-    if (selectedTicker && postedTicker && selectedTicker !== postedTicker) {
-      console.error(
-        `[board] posted ticker ${postedTicker} does not match selected_expression ticker ${selectedTicker} for thesis ${thesisId}. Refusing POST.`,
-      );
-      process.exit(1);
+    if (selectedTicker && postedTicker && selectedTicker !== postedTicker && stripVenuePrefix(selectedTicker) !== postedTicker && selectedTicker !== stripVenuePrefix(postedTicker)) {
+      console.log(JSON.stringify({ ok: false, error: `posted ticker ${postedTicker} does not match selected_expression ticker ${selectedTicker} for thesis ${thesisId}` }));
+      process.exit(0);
     }
 
     for (const field of ["direction", "instrument", "platform", "trade_type"] as const) {
       const selectedValue = typeof selectedExpression[field] === "string" ? selectedExpression[field]!.trim().toLowerCase() : "";
       const postedValue = typeof tradeBody[field] === "string" ? String(tradeBody[field]).trim().toLowerCase() : "";
       if (selectedValue && postedValue && selectedValue !== postedValue) {
-        console.error(
-          `[board] posted ${field}=${postedValue} does not match selected_expression ${field}=${selectedValue} for thesis ${thesisId}. Refusing POST.`,
-        );
-        process.exit(1);
+        console.log(JSON.stringify({ ok: false, error: `posted ${field}=${postedValue} does not match selected_expression ${field}=${selectedValue} for thesis ${thesisId}` }));
+        process.exit(0);
       }
     }
 
@@ -346,21 +352,17 @@ async function validatePayloadAgainstSavedExtraction(
       if (record.executable === true) executableDirectTickers.add(ticker);
     }
 
-    const selectedIsProxy = !!(selectedTicker && !directTickers.has(selectedTicker));
+    const selectedIsProxy = !!(selectedTicker && !directTickers.has(selectedTicker) && !directTickers.has(stripVenuePrefix(selectedTicker)));
     const fallbackTag = typeof routeEvidence.fallback_reason_tag === "string" ? routeEvidence.fallback_reason_tag.trim() : "";
 
     if (selectedIsProxy) {
       if (!fallbackTag || !FALLBACK_REASON_TAGS.has(fallbackTag)) {
-        console.error(
-          `[board] proxy route for thesis ${thesisId} is missing valid fallback_reason_tag. Refusing POST.`,
-        );
-        process.exit(1);
+        console.log(JSON.stringify({ ok: false, error: `proxy route for thesis ${thesisId} is missing valid fallback_reason_tag` }));
+        process.exit(0);
       }
       if (executableDirectTickers.size > 0 && fallbackTag !== "direct_weaker_fit") {
-        console.error(
-          `[board] proxy route for thesis ${thesisId} has executable direct checks and must use fallback_reason_tag=direct_weaker_fit. Refusing POST.`,
-        );
-        process.exit(1);
+        console.log(JSON.stringify({ ok: false, error: `proxy route for thesis ${thesisId} has executable direct checks and must use fallback_reason_tag=direct_weaker_fit` }));
+        process.exit(0);
       }
     }
   }
@@ -375,10 +377,12 @@ async function validatePayloadAgainstSavedExtraction(
   if (extractedQuoteSet.size > 0) {
     const headlineQuote = normalizeText(tradeBody.headline_quote);
     if (headlineQuote && !extractedQuoteSet.has(headlineQuote)) {
-      console.error(
-        `[board] headline_quote must match the thesis quotes saved in extraction ${thesisId}. Refusing POST.`,
-      );
-      process.exit(1);
+      // Also accept headline as substring of any saved quote (headline is a <=120 char excerpt)
+      const isSubstring = [...extractedQuoteSet].some(q => q.includes(headlineQuote));
+      if (!isSubstring) {
+        console.log(JSON.stringify({ ok: false, error: `headline_quote must match or be a substring of thesis quotes saved in extraction ${thesisId}` }));
+        process.exit(0);
+      }
     }
 
     const segments = (tradeBody.derivation as { segments?: unknown } | undefined)?.segments;
@@ -386,14 +390,14 @@ async function validatePayloadAgainstSavedExtraction(
       const segmentQuoteMatches = segments.some((segment) => {
         if (!segment || typeof segment !== "object") return false;
         const quote = normalizeText((segment as { quote?: unknown }).quote);
-        return !!quote && extractedQuoteSet.has(quote);
+        if (!quote) return false;
+        // Accept exact match or substring/superstring of any saved quote
+        return extractedQuoteSet.has(quote) || [...extractedQuoteSet].some(q => q.includes(quote) || quote.includes(q));
       });
 
       if (!segmentQuoteMatches) {
-        console.error(
-          `[board] derivation segments do not include any quote saved for thesis ${thesisId}. Refusing POST.`,
-        );
-        process.exit(1);
+        console.log(JSON.stringify({ ok: false, error: `derivation segments do not include any quote matching thesis ${thesisId}` }));
+        process.exit(0);
       }
     }
   }
@@ -437,6 +441,7 @@ if (!apiKey) {
 }
 
 await enrichBaselineViaAssess(body as Record<string, unknown>, baseUrl, apiKey);
+applyCanonicalPublishPrice(body as Record<string, unknown>);
 payload = JSON.stringify(body);
 
 console.error(`[board] POST to ${baseUrl}/api/trades`);
@@ -484,7 +489,7 @@ appendTraceEvent({
 try {
   const { join: joinPath } = await import("path");
   const { readFileSync: rf, writeFileSync: wf, mkdirSync } = await import("fs");
-  const counterDir = joinPath(import.meta.dir, "..", "..", "..", ".claude");
+  const counterDir = getUserStateDir();
   const nudgeFile = joinPath(counterDir, ".trade-count");
   let count = 0;
   try { count = parseInt(rf(nudgeFile, "utf8").trim(), 10) || 0; } catch { /* first run */ }
@@ -499,23 +504,20 @@ try {
   }
 } catch { /* nudge is entirely optional */ }
 
-// Auto-push trade_routed event if streaming context exists
+// Auto-push trade_posted event (v2 only — frontend maps v1 trade_routed → thesis_routed)
 try {
   const { getStreamContext, pushEvent } = await import("./stream-context");
   const ctx = getStreamContext(runId);
   if (ctx) {
-    // Push trade_routed so the viewer sees the ticker badge on the thesis pill
-    await pushEvent(ctx.source_id, "trade_routed", {
-      message: `${body.ticker} ${body.direction?.toUpperCase()} at $${body.entry_price}`,
+    await pushEvent(ctx.source_id, "trade_posted", {
       thesis_id: body.thesis_id ?? null,
       ticker: body.ticker,
       direction: body.direction,
-      platform: body.platform,
-      entry_price: body.entry_price,
+      trade_id: (() => { try { return JSON.parse(text).id; } catch { return null; } })(),
     }, { runId });
 
     if (body.source_theses && Array.isArray(body.source_theses)) {
-      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run skill-dev/skill-v2-lab/scripts/finalize-source.ts ...");
+      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run skill/scripts/finalize-source.ts ...");
     }
   }
 } catch { /* streaming is optional */ }

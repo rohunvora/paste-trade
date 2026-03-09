@@ -3,7 +3,7 @@ name: trade
 description: Finds every tradeable thesis in a source and routes each to an executable trade. Works with tweets, podcasts, articles, screenshots, hunches, and market observations. Use when the user says "/trade", "trade this", "what's the trade", pastes a source and wants the trade, or states a directional belief they want translated into an expression. Stay dormant for generic market chat.
 metadata:
   openclaw:
-    homepage: https://github.com/rohunvora/paste-trade-skill/blob/main/docs/install/openclaw.md
+    homepage: https://paste.trade/docs/openclaw
     requires:
       bins:
         - bun
@@ -14,6 +14,8 @@ command-tool: trade_slash_dispatch
 # /trade
 
 Think through trades live. The user is watching the work, not just the final card. Narrate what changed your mind, what has no clean expression, and why one instrument beats another.
+
+Supporting docs: `references/` (CLI cheatsheet, routing decision rules, event types, glossary).
 
 ## Defaults
 
@@ -31,34 +33,15 @@ Think through trades live. The user is watching the work, not just the final car
 - After source creation, send: `Watch live: {source_url} (I will post final trades here when done).`
 - Keep final Telegram chat copy concise when a paste.trade link exists: summary + execution blocks, then link.
 
-## Rollback Scope
-
-This rollback profile intentionally keeps only the proven core flow:
-
-- thesis extraction
-- source creation + live stream events
-- route-check based routing (Hyperliquid/Robinhood)
-- post + finalize accounting
-
-Temporarily out of scope in this profile:
-
-- edit-mode maintenance flows
-- X profile scan workflows
-- prediction-market routing adapters
-
 ## Core Loop
 
 ### 1. Classify input
 
 - URL source: extract first.
 - User-typed thesis: their words are the thesis. Skip extraction.
-- If URL is `paste.trade/s/:id` or `paste.trade/t/:id`, treat as normal source input in this rollback profile.
+- If URL is `paste.trade/s/:id` or `paste.trade/t/:id`, treat as normal source input.
 
-Source-link speed rule (mandatory):
-
-- Create the source page immediately after the first successful metadata extraction, before any long-running transcript or diarization work.
-- Do not wait for diarization to finish before creating the source URL.
-- If some metadata is missing, create with best-known fields now and continue processing.
+### 2. Extract and create source
 
 Primary extraction:
 
@@ -68,20 +51,19 @@ bun run scripts/extract.ts "URL"
 # YouTube: transcript omitted from output; read the file at saved_to.
 ```
 
-Execution sequence (mandatory):
-
-1. Run `extract.ts`.
-2. Immediately run `create-source.ts` and send the live board URL.
-3. Only after source creation, run optional long steps (`diarize.ts`, transcript reads, uploads).
-
-### 2. Create the source run
-
 Create the source page as soon as you know the source metadata:
 
 ```bash
 bun run scripts/create-source.ts '{ "url": "...", "title": "...", "platform": "...", "author_handle": "...", "source_date": "...", "source_images": [...], "word_count": N, "duration_seconds": N, "speakers_count": N }'
 # Returns: { source_id, source_url, status: "processing", run_id }
 ```
+
+Execution sequence (mandatory):
+
+1. Run `extract.ts`.
+2. Immediately run `create-source.ts` and send the live board URL.
+3. Do NOT read the `saved_to` file before this point.
+4. Only after source creation, run enrichment, transcript reads, and uploads.
 
 Notes:
 
@@ -91,7 +73,6 @@ Notes:
 - Save `run_id` and thread it through every later adapter call for this source run.
 - If the prompt includes internal tracing metadata (`run_id=...`), pass that value as `run_id` in the `create-source.ts` payload.
 - Use the canonical live-link line from Chat UX.
-- For YouTube/no-captions flows, this step must happen before `diarize.ts` and before long transcript reads.
 
 Status update payload shape:
 
@@ -101,33 +82,59 @@ bun run scripts/status.ts <source_id> '{ "event_type": "status", "data": { "mess
 
 Tell the user: `Watch live: {source_url}`
 
-YouTube diarization gate (after source exists, optional):
+### 3. Enrich source
 
-- Do not run `diarize.ts` by default.
-- Run `diarize.ts` only when attribution quality is insufficient for quote ownership:
-  - multiple speakers are present and identity is ambiguous in extract output
-  - planned theses depend on who said the quote
-  - extract transcript lacks reliable speaker labels/timestamps for the needed quotes
-- Skip diarization when single-speaker attribution is already clear enough for save/post/finalize.
-- If diarization is needed, start it after source creation as non-blocking enrichment; never block save/update/post/finalize waiting for it.
+Runs after the source page exists and the user has a live link. Runs before thesis extraction.
+
+**Missing metadata resolution:**
+
+- Check extraction output for missing `author_handle`, `source_date`, `title`.
+- If author missing: scan extracted text for byline patterns, then web search URL/title to find author and X handle.
+- If `source_date` missing: scan text for date indicators, web search, or current date as last resort.
+- Enriched metadata is used in trade posts (source page author stays as-is).
+
+**YouTube diarization decision:**
+
+- Check title + description for multi-speaker indicators (guest names, "interview", "panel", "debate").
+- If multi-speaker detected:
+  - `GEMINI_API_KEY` available: run `diarize.ts`.
+  - `GEMINI_API_KEY` missing: offer user a choice:
+    1. Continue without speaker attribution (trades attributed to channel).
+    2. Get a Gemini API key (link: https://aistudio.google.com/apikey), paste it, save to `.env` using `getPreferredEnvWritePath()` pattern from `ensure-key.ts`, then run `diarize.ts`.
+- If not multi-speaker: read transcript from `saved_to`.
 
 ```bash
 bun run scripts/diarize.ts "URL"
 # Speaker labels + timestamps. Costs ~$0.14/hr. Writes to its own saved_to.
 ```
 
-Canonical transcript:
+**Speaker identity resolution:**
 
-- default: use extract `saved_to`
-- if diarization completes in time and improves attribution, switch to diarize `saved_to`
-- always read from the file path, not task output
-- upload full text once per run:
+- After reading content, if named speakers identified: web search for each speaker's X handle.
+- Use resolved handles as `author_handle` on per-trade posts.
+- Source-level author stays as channel (source = publisher, trade = quote author).
+- Avatars not in scope: backend auto-resolves via `ensureAuthor` + `enqueueAssetJob`.
+
+**Canonical transcript selection:**
+
+- Default: use extract `saved_to`.
+- If diarized: switch to diarize `saved_to`.
+- Always read from the file path, not tool output.
+- Upload full text once per run:
 
 ```bash
 bun run scripts/upload-source-text.ts <source_id> --file <saved_to> --provider transcript
 ```
 
-### 3. Extract theses
+**Push enriched metadata:**
+
+If enrichment resolved new metadata (author handle, source date, speakers, or thumbnail), push it now so the source page updates before thesis extraction:
+
+```bash
+bun run scripts/update-source.ts <source_id> --run-id <run_id> '{ "author_handle": "...", "source_date": "...", "thumbnail_url": "...", "speakers": [...] }'
+```
+
+### 4. Extract theses
 
 Read the canonical source artifact and find every tradeable thesis.
 
@@ -135,39 +142,46 @@ A thesis is a directional belief about what changes and what that means for pric
 
 Process:
 
-1. First pass: list candidate theses chronologically, one line each, with the quote that most implies direction.
-2. Second pass: save every real candidate as an initial unrouted thesis record before routing.
-3. Third pass: run route-check, then update each thesis to routed or confirmed unrouted.
+1. First pass: read the source and list every directional belief, one line each, with the quote that most implies direction.
+2. Second pass: for each belief, ideate 1-3 ways to trade it. These can be tickers, sectors, asset classes, or descriptions. Use web search if needed to clarify what's tradeable.
+3. Third pass: save each thesis with its trade ideas as an unrouted record.
 
 ```json
 {
-  "thesis": "short description of the directional belief",
+  "thesis": "author's directional belief in one sentence, in your words not theirs",
   "horizon": "author's timing language, if any",
   "route_status": "unrouted",
   "unrouted_reason": "pending_route_check",
   "who": [
-    { "ticker": "instrument that expresses this thesis", "direction": "long | short" }
+    { "ticker": "NVDA", "direction": "long" },
+    { "ticker": "AI infrastructure companies", "direction": "long" }
   ],
   "why": ["reasoning step from author", { "text": "researched fact", "url": "...", "origin": "research" }],
-  "quotes": ["verbatim quote from source, never rephrase"],
-  "headline": "exact quote from quotes[] that is <=120 chars",
+  "quotes": ["exact words from source that anchor the thesis"],
+  "headline_quote": "verbatim from quotes[], <=120 chars — frozen at extraction, post.ts validates exact match",
   "source_date": "ISO 8601 datetime when available (published_at), date-only fallback otherwise"
 }
 ```
 
-`who` should contain 1-3 plausible instruments per thesis before route-check.
+Research depth scales with source density:
+- Dense source (podcast, article, PDF): the author did the thinking. Verify, price, and narrate.
+- Sparse source (tweet, user thesis, screenshot): you are the analyst. Research deeply, consider 3+ instruments, and build the frame the source did not provide.
+
+`who` captures 1-3 trade ideas per thesis. These are starting points for routing, not final selections. Can range from specific tickers to broad descriptions. During routing, `who` is overwritten with the final selected expression.
+
+A thesis is one belief — if the same belief could be traded through different instruments, those are `who` entries, not separate theses.
 
 For unresolved candidates, do not drop them. Save them as:
 
 ```json
 {
-  "thesis": "directional belief still worth tracking",
+  "thesis": "...",
   "route_status": "unrouted",
   "unrouted_reason": "no clean liquid instrument / weak directional expression / evidence gap",
   "who": [],
-  "why": ["why this still matters"],
-  "quotes": ["supporting quote"],
-  "headline": "best directional quote"
+  "why": ["..."],
+  "quotes": ["..."],
+  "headline_quote": "..."
 }
 ```
 
@@ -177,18 +191,28 @@ Narrate the thesis map to the live page after the first pass:
 bun run scripts/stream-thought.ts --run-id <run_id> "Found 4 theses: oil supply risk, gold safe haven, defense spending will go up, Anthropic will win"
 ```
 
-Save each thesis:
+Save all theses from extraction in one batch call (pass `--total` on first save if using individual saves instead):
 
 ```bash
-bun run scripts/save.ts --run-id <run_id> '<thesis JSON>'
-# Returns: { id, file, count }
-cat thesis.json | bun run scripts/save.ts --run-id <run_id> --stdin
+# Preferred — batch save all theses at once:
+echo '[{...}, {...}]' | bun run scripts/batch-save.ts --run-id <run_id> --total 5
+# Returns: [{ id, index }, ...]
 
-bun run scripts/save.ts --run-id <run_id> --update <id> '<partial JSON>'
+# Individual save (when extracting one at a time):
+bun run scripts/save.ts --run-id <run_id> --total 5 '<thesis JSON>'
+# Returns: { id, file, count }
+
+# Update a saved thesis (used during routing):
+echo '<partial JSON>' | bun run scripts/save.ts --run-id <run_id> --update <id>
 ```
 
-Each thesis routes independently.
-Save and post steps should be sequential to avoid sibling-call cancellation on first failure.
+Track the returned thesis IDs — you'll need every one for finalization.
+
+Each thesis routes independently. Parallelize routing across theses: run research,
+instrument discovery, route, save, and post concurrently for all theses.
+Save and post return `{"ok": false, "error": "..."}` on validation errors (exit 0),
+so parallel calls are safe -- one failure does not cancel siblings. Always check the
+`ok` field (or presence of `error`) in tool output before proceeding.
 Do not use routing difficulty as a filter at extraction time. Capture first, then route or explicitly mark unrouted.
 
 Long transcript handling:
@@ -198,14 +222,12 @@ Long transcript handling:
 - If below that threshold, do chunk extraction sequentially in the main thread.
 - If you parallelize, workers are extraction-only: main thread must merge/dedupe, then do all save/update/post/finalize calls.
 
-### 4. Route the thesis
-
-For each thesis, find the best trade.
+### 5. Route and price
 
 For each thesis, determine the best executable expression on supported venues.
-On adapter error in this stage, use Continuous Recovery Loop and retry the same step.
+On adapter error, retry the failed step once. If it fails again, try an alternative ticker or skip the thesis.
 
-Routing sequence per thesis: research -> discover -> route-check -> save.
+#### 5a. Research
 
 Supported venues:
 
@@ -213,24 +235,30 @@ Supported venues:
 - Robinhood
 - Polymarket
 
-Available routing tools (use in this order):
+For each thesis, routing runs:
 
-- Web research: Run at least one search per thesis before picking instruments.
-  Your training data is stale - verify the thesis still holds at current date,
-  check for recent catalysts, and find facts the source doesn't mention. Cite
-  in `why` as { "text": "...", "url": "...", "origin": "research" } and persist
-  to `research_used`. A trade with current-date research is a better output
-  than one without it.
-
-- Instrument discovery (`adapters/hyperliquid/instruments.ts --query "<thesis keywords>" --compact`):
-  Searches the live Hyperliquid universe - including sector baskets, commodities,
-  indices, private company perps, and equities you may not know exist. Returns
-  ranked candidates with descriptions.
-
-- `route-check` (`scripts/route-check.ts`): Validates a specific ticker/date against supported venues and returns pricing context. Does not
-  generate candidates - only validates them.
-
-- `save.ts --update`: Persist the routed or unrouted outcome and its route evidence.
+1. **Research** (run in parallel):
+   - **Web search**: verify the thesis holds today, find developments, and research
+     tradeable instruments for the ideas in `who`. Your training data is stale for
+     tickers and listings. Search to find what's actually available.
+     Cite findings in `why` as { "text": "...", "url": "...", "origin": "research" }.
+   - **Instrument discovery** (`scripts/discover.ts --query "<keywords>"`):
+     search available instruments across all venues (Hyperliquid + Polymarket) using
+     terms from `who`. Works best with single concrete terms, not multi-word abstractions.
+     Use `--catalog` for a full listing of non-crypto HL instruments.
+   - **Source context** (`scripts/source-excerpt.ts --file <saved_to> --query "<thesis keywords>"`):
+     retrieve surrounding context from the original source for this thesis.
+     After extraction splits a source into theses, adjacent details get lost.
+     Use this to find what the author said around each claim — qualifications,
+     supporting numbers, competitive landscape, or nuance that strengthens
+     the derivation. Also use `--around "<exact quote>"` to expand a specific quote.
+2. **Route** (`scripts/route.ts`): validate the best candidates
+   from both sources against supported venues and get pricing. Takes ticker symbols only.
+3. **Select and save**: pick the expression with the tightest link between the source
+   quote and the instrument. The trade ideas in `who` are starting context, not decisions.
+   Routing may confirm them, improve on them, or find something better entirely.
+   Prefer sector-level instruments over single equities for broad theses.
+   Persist via `save.ts --update`.
 
 Routing requirements:
 
@@ -239,18 +267,6 @@ Routing requirements:
   thesis with explicit proxy reasoning and citations.
 - Before final route, check quote-to-trade logic: if original author would not
   recognize the link, reroute.
-
-Thesis scope determines routing order:
-
-  A thesis about a *specific company* ("NuScale can't deliver") -> route-check
-  the company ticker directly.
-
-  A thesis about a *sector, commodity, index, or industry trend* ("nuclear
-  industry shakeout", "lithium prices surging", "data center energy demand") ->
-  the direct expression is a sector/commodity instrument, not a single equity.
-  A single stock is a proxy for a sector thesis. Run instrument discovery first,
-  then route-check the best candidate. Only fall back to a single equity if no
-  sector-level instrument exists or has insufficient liquidity.
 
 Directness classification:
 
@@ -271,7 +287,7 @@ For routed theses, update saved records to include canonical route evidence:
         "ticker_tested": "SMR",
         "executable": true,
         "shares_available": true,
-        "entry_price": 12.54,
+        "publish_price": 12.54,
         "source_date_price": 12.525
       }
     ],
@@ -281,7 +297,7 @@ For routed theses, update saved records to include canonical route evidence:
       "instrument": "shares",
       "platform": "robinhood",
       "trade_type": "direct",
-      "entry_price": 12.54,
+      "publish_price": 12.54,
       "source_date_price": 12.525,
       "since_published_move_pct": 0.12
     }
@@ -289,30 +305,78 @@ For routed theses, update saved records to include canonical route evidence:
 }
 ```
 
-Mapping rule from route-check output:
+Mapping rule from route output:
 
 - `route.selected_expression.routed_ticker` -> `route_evidence.selected_expression.ticker`
 - keep `instrument`/`platform` strings exactly as returned (`shares`/`perps`, `robinhood`/`hyperliquid`)
 - if proxy route selected, include `fallback_reason_tag` (and `fallback_reason_text` when direct executable exists)
 
+These fields cross-reference each other — `save.ts` validates consistency:
+every `subjects[].label` needs a matching `direct_checks[].subject_label`,
+and the selected ticker must appear in `who`. Include updated `who`,
+`route_evidence`, and `derivation` in the same `--update` call.
+
+#### 5b. Narrate
+
 Build a derivation chain for every routed trade:
 
 ```json
 {
+  "explanation": "Lead with the sharpest insight, not a company description. Show why this instrument won over alternatives.",
+  "comparison": {
+    "question": "Which chipmaker benefits most from AI infrastructure buildout?",
+    "candidates": [
+      { "ticker": "NVDA", "label": "Nvidia", "case": "Controls 90% of AI training via CUDA lock-in. Next earnings Apr 28.", "catalyst": "Earnings Apr 28", "selected": true },
+      { "ticker": "AMD", "label": "AMD", "case": "Gaining data center share but MI300 adoption still proving out", "catalyst": "MI300 ramp Q2" },
+      { "ticker": "INTC", "label": "Intel", "case": "Foundry pivot — execution risk, revenue declining 8% YoY" }
+    ],
+    "reasoning": "NVDA's CUDA moat makes it the direct play. AMD is the second-order bet on competition emerging."
+  },
   "segments": [
-    { "quote": "verbatim source quote", "speaker": "who", "speaker_handle": "x_handle", "timestamp": "14:22", "source_url": "..." }
+    { "quote": "verbatim source quote", "speaker": "speaker name", "speaker_handle": "@handle" }
   ],
   "steps": [
     { "text": "reasoning grounded in source", "segment": 0 },
-    { "text": "researched fact backing the thesis", "url": "https://..." },
+    { "text": "researched fact", "url": "https://..." },
     { "text": "inference: skill's own reasoning" }
   ]
 }
 ```
 
+Write an `explanation` for every routed trade. Lead with the sharp insight,
+not the safe summary. "NVDA's moat is the CUDA ecosystem" not "NVDA is a
+semiconductor company." Your thinking shows you reason sharply — do not
+flatten that into generic analysis. The explanation is the primary display;
+steps become provenance metadata.
+
+Explanation voice:
+- When you evaluated multiple candidates, show why the winner won — not just why it fits.
+- Reader's first question decides the frame: "Why this ticker?" → show the comparison. "When do catalysts hit?" → show the calendar. "How does quote become trade?" → show the connection.
+- Write assertively. Hedge with data ("down 70% on GLP-1 fears"), not with qualifiers ("it could potentially benefit").
+
+Steps should earn the conclusion, not summarize it. If the author named the
+ticker, the chain can be short. If routing required a leap, earn it. If a
+number is the argument, show the number — don't describe it in prose.
+
+When routing a sparse source where you are selecting the instrument
+(not the author), research what's happening NOW for each candidate:
+upcoming earnings, product launches, regulatory decisions, central
+bank meetings, contract announcements. Between candidates with equal
+thesis fit, the one with a concrete near-term catalyst is more
+actionable.
+
+`catalyst` is a concrete event + date: "Earnings Apr 28",
+"Fed decision Jun 12", "product launch Q2". Omit when no concrete
+event exists — absence doesn't disqualify, but it means the trade
+lacks a near-term timing anchor.
+
+`case` is thesis-relative: argue why this ticker captures (or fails
+to capture) the source thesis. One-liner for rejects, detailed for
+contenders.
+
 Rules:
 
-- `segment` index = grounded in a source quote
+- Provenance: has `segment` = sourced from quote, has `url` = backed by research, has neither = agent inference
 - when a step depends on external research or a factual check, embed the source inline as `[phrase](url)`; treat this as part of the format, not decoration
 - `url` on a step is a fallback when inline linking does not fit
 - 2-5 steps
@@ -320,7 +384,7 @@ Rules:
 - user thesis: their words are the segment, `speaker: "user"`
 - video/podcast: include timestamps; resolve speaker X handles when it materially helps attribution
 
-### 5. Choose the instrument and price it
+#### 5c. Price and save
 
 Instrument preference:
 
@@ -328,21 +392,25 @@ Instrument preference:
 - Otherwise direct thesis subject via shares
 - If no direct executable route, use the best proxy
 
-Pricing:
+Pricing (same `route.ts`, with date flags):
 
 ```bash
-bun run scripts/route-check.ts --run-id <run_id> TICKER direction --source-date "ISO-8601-datetime-or-YYYY-MM-DD" --horizon "timing"
-# Returns selected expression + price context.
+bun run scripts/route.ts --run-id <run_id> --thesis-id <id> TICKER direction --source-date "ISO-8601-datetime-or-YYYY-MM-DD" --horizon "timing"
+# Returns: { tool: "route", route: { ticker, direction, executable, selected_expression, alternatives, price_context, candidate_routes, note }, diagnostics }
+# selected_expression: { platform, instrument, routed_ticker, publish_price }
+# price_context: { current_price, source_date, source_date_price, since_published_move_pct }
 # If perps route selected and routed_ticker is provided, post that routed_ticker as ticker.
 ```
 
 Use tool numbers directly. Do not estimate or recompute.
 
-Update the thesis record with pricing and routing details:
+After routing completes for a thesis, persist everything in one update — `who` (updated to final ticker), `route_status`, `route_evidence`, and `derivation` together:
 
 ```bash
-bun run scripts/save.ts --run-id <run_id> --update <id> '<partial JSON>'
+echo '<JSON with who + route_evidence + derivation>' | bun run scripts/save.ts --run-id <run_id> --update <id>
 ```
+
+This emits `thesis_routed` (or `thesis_dropped`) events automatically, updating the live source page with explanation and comparison data as each thesis resolves.
 
 ### 6. Post and finalize
 
@@ -354,12 +422,9 @@ echo '<JSON payload>' | bun run scripts/post.ts --run-id <run_id>
 
 Post rules:
 
-- Post routed theses sequentially.
 - `headline_quote` must be an exact string match to one of saved `quotes[]`.
-- Keep `headline_quote` <=120 chars (choose this during extraction; do not paraphrase at post time).
 - Posted `ticker`, `direction`, `instrument`, `platform`, and `trade_type` must match `route_evidence.selected_expression`.
-- Always pass `source_date` as full ISO datetime when available (not date-only if timestamp exists).
-- Carry `source_date_price` and `since_published_move_pct` from route-check `price_context` whenever present.
+- Carry `source_date_price` and `since_published_move_pct` from route `price_context` whenever present.
 - `post.ts` will attempt baseline backfill via `/api/skill/assess` if those fields are missing, but treat that as fallback not primary path.
 
 After all trade POSTs succeed, finalize the source explicitly:
@@ -387,11 +452,11 @@ Required trade fields:
 
 | Field | Notes |
 |-------|-------|
-| `ticker` | If route-check selected expression returns `routed_ticker`, use that ticker |
+| `ticker` | If route selected expression returns `routed_ticker`, use that ticker |
 | `direction` | `"long"` or `"short"` |
-| `entry_price` | Stocks/perps: `source_date_price` from route-check price context |
-| `source_date_price` | Required for baseline P&L. Use route-check `price_context.source_date_price` |
-| `since_published_move_pct` | Required when available. Use route-check `price_context.since_published_move_pct` |
+| `publish_price` | Stocks/perps: `source_date_price` from route price context |
+| `source_date_price` | Required for baseline P&L. Use route `price_context.source_date_price` |
+| `since_published_move_pct` | Required when available. Use route `price_context.since_published_move_pct` |
 | `thesis` | Thesis text |
 | `headline_quote` | Must exactly match one saved `quotes[]` value and be <=120 chars |
 | `ticker_context` | 1-3 sentences on what the ticker is, why it fits, and the recent catalyst. Inline-link external facts when they matter. |
@@ -403,7 +468,7 @@ Required trade fields:
 | `instrument` | `"shares"` or `"perps"` |
 | `platform` | `"robinhood"` or `"hyperliquid"` |
 | `thesis_id` | ID from `save.ts` |
-| `derivation` | `{ segments, steps }` |
+| `derivation` | `{ explanation, comparison?, segments, steps }` |
 
 Top-level source fields:
 
@@ -417,8 +482,6 @@ Finalization-only fields:
 
 Useful optional `trade_data` fields:
 
-- `source_date_price`
-- `since_published_move_pct`
 - `since_published_pnl_dollars`
 - `horizon`
 - `kills`
@@ -466,16 +529,6 @@ When 3+ trades come from one source, open with 1-2 sentences framing the portfol
 If both direct and derived trades exist, show direct first.
 
 If posting fails: `Board unavailable. Skipping post.`
-
-## Account and Key Behavior
-
-- Preferred path: reuse one `PASTE_TRADE_KEY` across clients.
-- First `/trade` run auto-creates key if none exists.
-- If separate keys already exist, run account connect flow:
-
-```bash
-bun run scripts/connect.ts
-```
 
 ## Hard Rules
 

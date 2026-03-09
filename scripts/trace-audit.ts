@@ -1,15 +1,14 @@
 import { createHash } from "crypto";
 import { appendFileSync, mkdirSync } from "fs";
-import os from "os";
 import path from "path";
+import { getUserStateDir } from "./runtime-paths";
 
 const MAX_TRACE_STRING_CHARS = 300;
 
 const DEFAULT_TRACE_LOG_PATH = path.join(
-  os.homedir(),
-  ".openclaw",
+  getUserStateDir(),
   "logs",
-  "trade-slash-wrapper.audit.log",
+  "trade-runtime.audit.log",
 );
 
 function sanitizeTraceString(value: unknown): string {

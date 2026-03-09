@@ -8,9 +8,9 @@
  * Other URLs: markdown.new → raw fetch + HTML strip.
  *
  * Usage:
- *   bun run skill-dev/skill-v2-lab/scripts/extract.ts "https://youtube.com/watch?v=xxx"
- *   bun run skill-dev/skill-v2-lab/scripts/extract.ts "https://x.com/user/status/123"
- *   bun run skill-dev/skill-v2-lab/scripts/extract.ts "https://example.com/article"
+ *   bun run skill/scripts/extract.ts "https://youtube.com/watch?v=xxx"
+ *   bun run skill/scripts/extract.ts "https://x.com/user/status/123"
+ *   bun run skill/scripts/extract.ts "https://example.com/article"
  *
  * Requires: yt-dlp (brew install yt-dlp) for YouTube
  * Optional: X_BEARER_TOKEN env var for X API (better rate limits, higher reliability)
@@ -18,35 +18,17 @@
  */
 
 import { $ } from "bun";
+import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { getRuntimeSourceDir, readEnvValue } from "./runtime-paths";
 
 // ---------------------------------------------------------------------------
 // X API tokens (optional)
 // ---------------------------------------------------------------------------
 
 function loadEnvToken(key: string): string | undefined {
-  const fromProcess = process.env[key];
-  if (typeof fromProcess === "string" && fromProcess.trim()) {
-    return fromProcess.trim();
-  }
-
-  try {
-    const envFile = Bun.file(`${import.meta.dir}/../../../.env`);
-    const text = envFile.textSync?.() ?? require("fs").readFileSync(envFile.name!, "utf-8");
-    for (const rawLine of text.split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith("#")) continue;
-      const splitIndex = line.indexOf("=");
-      if (splitIndex <= 0) continue;
-      const envKey = line.slice(0, splitIndex).trim();
-      if (envKey !== key) continue;
-      const envValue = line.slice(splitIndex + 1).trim();
-      if (!envValue) continue;
-      return envValue.replace(/^['"]|['"]$/g, "");
-    }
-  } catch { /* fall through */ }
-  return undefined;
+  return readEnvValue(key);
 }
 const X_BEARER_TOKEN = loadEnvToken("X_BEARER_TOKEN");
 const X_WEB_BEARER_TOKEN = loadEnvToken("X_WEB_BEARER_TOKEN");
@@ -1249,7 +1231,7 @@ async function main() {
   const url = process.argv[2];
   if (!url) {
     console.error(
-      "Usage: bun run skill-dev/skill-v2-lab/scripts/extract.ts <url>"
+      "Usage: bun run skill/scripts/extract.ts <url>"
     );
     process.exit(1);
   }
@@ -1270,7 +1252,8 @@ async function main() {
     const parsed = JSON.parse(result);
     if (!parsed.error) {
       const hash = new Bun.CryptoHasher("sha256").update(url).digest("hex").slice(0, 12);
-      const dir = join(import.meta.dir, "../data/sources");
+      const dir = getRuntimeSourceDir();
+      mkdirSync(dir, { recursive: true });
       const filePath = join(dir, `source-${hash}.json`);
       parsed.saved_to = filePath;
       await Bun.write(filePath, JSON.stringify(parsed));

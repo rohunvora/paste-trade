@@ -6,9 +6,18 @@
 npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
 ```
 
-## Required wrapper/plugin setup
+## Required OpenClaw-only bridge setup
 
-`/trade` dispatch in OpenClaw depends on the bundled `trade-slash-wrapper` plugin.
+`/trade` dispatch in OpenClaw depends on the bundled `trade-slash-wrapper`
+bridge plugin.
+
+This is OpenClaw-specific. Claude Code and Codex do not install or use it.
+
+What it does:
+- acknowledges `/trade` immediately
+- hands the real run off in background
+- remaps Telegram slash sessions back to the DM thread when needed
+
 Run this once after install, and again after every update:
 
 ```bash

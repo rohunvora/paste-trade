@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
+import { getRuntimeExtractionDir } from "./runtime-paths";
 
-const DATA_DIR = new URL("../data", import.meta.url).pathname;
-const DEFAULT_EXTRACTION_DIR = `${DATA_DIR}/extractions`;
+const DEFAULT_EXTRACTION_DIR = getRuntimeExtractionDir();
 
 interface RunCountOptions {
   extractionDir?: string;

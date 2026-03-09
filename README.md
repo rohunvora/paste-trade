@@ -12,7 +12,18 @@ Finds every tradeable thesis in a source and routes each to an executable trade.
 
 ## Install
 
+Claude Code and Codex only need the `trade` skill itself.
+
+OpenClaw needs one extra OpenClaw-only component: an async command bridge that
+acknowledges `/trade` immediately and then hands the real run off in background.
+If you are not using OpenClaw, ignore that step completely.
+
 ### OpenClaw
+
+OpenClaw-only extra:
+- installs the `trade` skill
+- installs the `trade-slash-wrapper` bridge plugin
+- makes `/trade` feel instant in chat while the real run continues in background
 
 ```bash
 npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
@@ -106,7 +117,7 @@ During launch hardening, `@v1` is the canonical install and update channel. Move
 scripts/            CLI tools the skill agent calls
 adapters/           Market API adapters (instrument discovery)
 references/         Supplementary docs loaded by SKILL.md
-openclaw-plugin/    OpenClaw wrapper for fast acknowledgment
+openclaw-plugin/    OpenClaw-only async command bridge for fast /trade acknowledgment
 docs/install/       Client-specific install guides
 ```
 

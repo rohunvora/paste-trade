@@ -8,21 +8,12 @@
  * Returns: { apiKey, baseUrl } — ready to use for API calls.
  */
 
-import { join } from "path";
-import { readFileSync, writeFileSync, existsSync, appendFileSync } from "fs";
-import { execSync } from "child_process";
+import { writeFileSync, existsSync, appendFileSync } from "fs";
+import { getEnvSearchPaths, getPreferredEnvWritePath, readEnvValue } from "./runtime-paths";
 
-/** Read a key from process.env or the repo-root .env file. */
+/** Read a key from process.env or the nearest user/project .env context. */
 export function loadKey(key: string): string | undefined {
-  if (process.env[key]) return process.env[key];
-  for (const envPath of findEnvPaths()) {
-    try {
-      const text = readFileSync(envPath, "utf8");
-      const match = text.match(new RegExp(`^${key}=(.+)$`, "m"));
-      if (match) return match[1].trim();
-    } catch { /* file doesn't exist or unreadable */ }
-  }
-  return undefined;
+  return readEnvValue(key);
 }
 
 /** Resolve the base URL for paste.trade API. */
@@ -84,23 +75,7 @@ export async function ensureKey(): Promise<string | null> {
 
 /** Find candidate .env file paths, ordered by preference. */
 function findEnvPaths(): string[] {
-  const paths: string[] = [];
-
-  // 1. Repo root (relative to this file: scripts/ -> skill-v2-lab/ -> skill-dev/ -> repo root)
-  paths.push(join(import.meta.dir, "..", "..", "..", ".env"));
-
-  // 2. Git root (handles cases where cwd differs from repo root)
-  try {
-    const gitRoot = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
-    const gitEnv = join(gitRoot, ".env");
-    if (!paths.includes(gitEnv)) paths.push(gitEnv);
-  } catch { /* not in a git repo */ }
-
-  // 3. Current working directory
-  const cwdEnv = join(process.cwd(), ".env");
-  if (!paths.includes(cwdEnv)) paths.push(cwdEnv);
-
-  return paths;
+  return getEnvSearchPaths();
 }
 
 /** Append PASTE_TRADE_KEY to the best .env file. Returns true if saved. */
@@ -119,16 +94,15 @@ function saveKeyToEnv(apiKey: string): boolean {
     }
   }
 
-  // No existing .env found — create one at repo root (first candidate)
-  const paths = findEnvPaths();
-  if (paths.length > 0) {
-    try {
-      writeFileSync(paths[0], `# paste.trade API key (auto-generated)\nPASTE_TRADE_KEY=${apiKey}\n`);
-      return true;
-    } catch {
-      return false;
+  const targetEnvPath = getPreferredEnvWritePath();
+  try {
+    if (existsSync(targetEnvPath)) {
+      appendFileSync(targetEnvPath, line);
+    } else {
+      writeFileSync(targetEnvPath, `# paste.trade API key (auto-generated)\nPASTE_TRADE_KEY=${apiKey}\n`);
     }
+    return true;
+  } catch {
+    return false;
   }
-
-  return false;
 }
