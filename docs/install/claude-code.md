@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a claude-code
+npx skills add rohunvora/paste-trade-skill -a claude-code
 ```
 
 ## Verify
@@ -23,7 +23,7 @@ X login is optional and should not block first run.
 ## Update
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a claude-code
+npx skills add rohunvora/paste-trade-skill -a claude-code
 ```
 
 ## Account portability

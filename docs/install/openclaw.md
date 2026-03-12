@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
+npx skills add rohunvora/paste-trade-skill -a openclaw
 ```
 
 ## Required OpenClaw-only bridge setup
@@ -47,7 +47,7 @@ X login is optional and should not block first run.
 ## Update
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
+npx skills add rohunvora/paste-trade-skill -a openclaw
 ```
 
 Then rerun wrapper setup:

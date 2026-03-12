@@ -3,7 +3,7 @@
 Versioning note:
 - public release numbering starts at `1.x`
 - the March 5 rewrite was previously tracked internally as `2.0.0`
-- the first public install contract is `v1`
+- install commands use the bare repo path (no version tag)
 
 ## [1.2.0] - 2026-03-11
 

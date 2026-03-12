@@ -26,7 +26,7 @@ OpenClaw-only extra:
 - makes `/trade` feel instant in chat while the real run continues in background
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
+npx skills add rohunvora/paste-trade-skill -a openclaw
 ```
 
 Then install/enable the bundled wrapper plugin:
@@ -38,13 +38,13 @@ bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
 ### Claude Code
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a claude-code
+npx skills add rohunvora/paste-trade-skill -a claude-code
 ```
 
 ### Codex
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a codex
+npx skills add rohunvora/paste-trade-skill -a codex
 ```
 
 ## Prerequisites
@@ -86,24 +86,21 @@ Direct thesis (raw market observation):
 ### OpenClaw
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
+npx skills add rohunvora/paste-trade-skill -a openclaw
 bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
 ```
 
 ### Claude Code
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a claude-code
+npx skills add rohunvora/paste-trade-skill -a claude-code
 ```
 
 ### Codex
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v1 -a codex
+npx skills add rohunvora/paste-trade-skill -a codex
 ```
-
-During launch hardening, `@v1` is the canonical install and update channel. Move to
-`@latest` only after the public release path is verified.
 
 ## Account portability
 
