@@ -477,6 +477,33 @@ if (platform === "polymarket") {
 applyCanonicalPublishPrice(body as Record<string, unknown>);
 payload = JSON.stringify(body);
 
+// Resolve author avatar locally (fxtwitter works from user machines, not CF Workers).
+// If the payload already has author_avatar_url, skip. Otherwise try to fetch it
+// for X-platform authors so the backend doesn't need to rely on its blocked resolvers.
+if (typeof body.author_handle === "string" && body.author_handle.trim() && !body.author_avatar_url) {
+  const authorPlatform = typeof body.platform === "string" ? body.platform : "";
+  const sourcePlatform = typeof body.source_platform === "string" ? body.source_platform : "";
+  // Only resolve for X/Twitter authors — other platforms resolve fine from Workers
+  if (authorPlatform === "x" || authorPlatform === "twitter" || sourcePlatform === "x" || sourcePlatform === "twitter") {
+    try {
+      const handle = body.author_handle.replace(/^@/, "");
+      const res = await fetch(`https://api.fxtwitter.com/${handle}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const data = await res.json() as { user?: { avatar_url?: string } };
+        const url = data.user?.avatar_url;
+        if (url) {
+          body.author_avatar_url = url.replace(/_normal\./, "_400x400.");
+          payload = JSON.stringify(body);
+        }
+      }
+    } catch {
+      // Non-fatal — backend asset job will retry
+    }
+  }
+}
+
 const { streamLog } = await import("./stream-log");
 streamLog(`Posting trade: ${(body as any).ticker} ${(body as any).direction}`);
 
