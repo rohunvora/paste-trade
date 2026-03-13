@@ -41,7 +41,7 @@ export function createTradeDispatchTool(api, ctx, deps = {}) {
     name: TRADE_COMMAND_TOOL,
     label: "Trade Slash Dispatch",
     description:
-      "Acknowledge /trade immediately, then hand off the actual trade run to background chat.send.",
+      "Acknowledge /trade immediately, run it in an isolated background session, and return only the progress link and final summary to chat.",
     parameters: tradeDispatchToolSchema,
     execute: async (_toolCallId, rawArgs) => {
       const args = rawArgs && typeof rawArgs === "object" ? rawArgs : {};

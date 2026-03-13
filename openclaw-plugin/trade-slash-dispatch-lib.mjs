@@ -1,10 +1,58 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { appendAuditEvent, hashForAudit } from "./run-trade-wrapper-lib.mjs";
 
-export const ACK_TEXT = "Running /trade now. I will send a live link in ~1 min.";
+export const ACK_TEXT = "Running /trade in the background now. I'll send a progress link shortly.";
 export const USAGE_TEXT = "Usage: /trade <thesis, URL, or source text>";
 export const MAX_COMMAND_CHARS = 20_000;
 export const MAX_RUN_ID_CHARS = 64;
+
+const SKILL_LAYOUT_CANDIDATES = [
+  {
+    skillRootUrl: new URL("..", import.meta.url),
+    skillFileUrl: new URL("../SKILL.md", import.meta.url),
+    scriptsDirUrl: new URL("../scripts", import.meta.url),
+    referencesDirUrl: new URL("../references", import.meta.url),
+  },
+  {
+    skillRootUrl: new URL("../..", import.meta.url),
+    skillFileUrl: new URL("../../SKILL.md", import.meta.url),
+    scriptsDirUrl: new URL("../../skill/scripts", import.meta.url),
+    referencesDirUrl: new URL("../../skill/references", import.meta.url),
+  },
+];
+
+function resolveSkillLayout() {
+  for (const candidate of SKILL_LAYOUT_CANDIDATES) {
+    const skillFilePath = fileURLToPath(candidate.skillFileUrl);
+    const scriptsDirPath = fileURLToPath(candidate.scriptsDirUrl);
+    const referencesDirPath = fileURLToPath(candidate.referencesDirUrl);
+
+    if (existsSync(skillFilePath) && existsSync(scriptsDirPath) && existsSync(referencesDirPath)) {
+      return {
+        skillRootPath: fileURLToPath(candidate.skillRootUrl),
+        skillFilePath,
+        scriptsDirPath,
+        referencesDirPath,
+      };
+    }
+  }
+
+  const fallback = SKILL_LAYOUT_CANDIDATES[0];
+  return {
+    skillRootPath: fileURLToPath(fallback.skillRootUrl),
+    skillFilePath: fileURLToPath(fallback.skillFileUrl),
+    scriptsDirPath: fileURLToPath(fallback.scriptsDirUrl),
+    referencesDirPath: fileURLToPath(fallback.referencesDirUrl),
+  };
+}
+
+const RESOLVED_SKILL_LAYOUT = resolveSkillLayout();
+export const SKILL_ROOT_PATH = RESOLVED_SKILL_LAYOUT.skillRootPath;
+export const SKILL_FILE_PATH = RESOLVED_SKILL_LAYOUT.skillFilePath;
+export const SCRIPTS_DIR_PATH = RESOLVED_SKILL_LAYOUT.scriptsDirPath;
+export const REFERENCES_DIR_PATH = RESOLVED_SKILL_LAYOUT.referencesDirPath;
 
 const TELEGRAM_SLASH_PREFIX = "telegram:slash:";
 const TELEGRAM_DIRECT_PREFIX_NO_AGENT = "telegram:direct:";
@@ -22,9 +70,27 @@ export function readCommandArg(args) {
 
 export function buildTradePrompt(input, runId) {
   const lines = [
-    `Use the "trade" skill for this request.`,
-    `Wrapper note: the user already received the initial acknowledgement. Do not repeat "Running /trade now. I will send a live link in ~1 min."`,
-    `Execution order (mandatory): run transcript/extract.ts first; as soon as you have url/title/platform/author_handle/source_date, run board/create-source.ts and share the live URL; only then run diarize.ts or long transcript reads.`,
+    `Execute the isolated /trade request from the additional system instructions now.`,
+    `Your FIRST action must be a tool call. Do not repeat the wrapper acknowledgement.`,
+  ];
+  if (typeof runId === "string" && runId.trim()) {
+    lines.push(`Internal tracing metadata: run_id=${runId.trim()}.`);
+  }
+  if (typeof input === "string" && input.trim()) {
+    lines.push(`User input summary:\n${input.trim()}`);
+  }
+  return lines.join("\n\n");
+}
+
+export function buildTradeSystemPrompt(input, runId) {
+  const lines = [
+    `IMPORTANT: Your FIRST action must be a tool call — do not generate any text before calling a tool.`,
+    `Read the skill file at ${SKILL_FILE_PATH} and follow its instructions for this trade request.`,
+    `Runtime path mapping: any \`skill/scripts/...\` examples in SKILL.md map to absolute scripts under ${SCRIPTS_DIR_PATH}. Any \`skill/references/...\` examples map to ${REFERENCES_DIR_PATH}. Use those absolute paths so this run works in isolated wrapper sessions across installed and dev-track layouts.`,
+    `Wrapper note: the user already received the initial acknowledgement ("Running /trade in the background now. I'll send a progress link shortly."). Do not repeat it.`,
+    `Wrapper delivery override (mandatory): after \`bun run ${SCRIPTS_DIR_PATH}/create-source.ts\` succeeds, do NOT send \`Watch live: {source_url}\` yourself. The wrapper delivers the progress link immediately after source creation and sends the final summary at the end. Do not send chat progress/status messages like "Now let me..." or "All posted...". Your only plain-text assistant message in this run should be the compact final summary (or a brief no-trade result) after all posting/finalization work completes.`,
+    `Execution order (mandatory): first run \`bun run ${SCRIPTS_DIR_PATH}/onboard.ts\`. For URL or source inputs, run \`bun run ${SCRIPTS_DIR_PATH}/extract.ts\` first. As soon as you have url/title/platform/author_handle/source_date, run \`bun run ${SCRIPTS_DIR_PATH}/create-source.ts\`. Immediately continue with \`diarize.ts\`, transcript reads, \`save.ts\`, \`route.ts\`, \`post.ts\`, and \`finalize-source.ts\` from ${SCRIPTS_DIR_PATH}.`,
+    `Do not rely on legacy shorthand like \`transcript/extract.ts\` or \`board/create-source.ts\`. Use the resolved scripts directory above.`,
   ];
   if (typeof runId === "string" && runId.trim()) {
     lines.push(
@@ -135,6 +201,7 @@ export function buildWrapperPayload({ command, sessionKey, idempotencyKey, runId
     idempotencyKey: idempotencyKey.trim(),
     runId: normalizedRunId || undefined,
     message: buildTradePrompt(normalizedCommand, normalizedRunId || undefined),
+    extraSystemPrompt: buildTradeSystemPrompt(normalizedCommand, normalizedRunId || undefined),
   };
 }
 
@@ -146,6 +213,8 @@ function summarizePayloadForAudit(payload) {
     runIdHash: payload.runId ? hashForAudit(payload.runId) : null,
     messageHash: hashForAudit(payload.message),
     messageLength: payload.message.length,
+    extraSystemPromptHash: payload.extraSystemPrompt ? hashForAudit(payload.extraSystemPrompt) : null,
+    extraSystemPromptLength: payload.extraSystemPrompt?.length ?? 0,
   };
 }
 

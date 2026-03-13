@@ -17,7 +17,7 @@ command-tool: trade_slash_dispatch
 
 Think through trades live. The user is watching the work, not just the final card. Narrate what changed your mind, what has no clean expression, and why one instrument beats another.
 
-Supporting docs: `skill/references/` (skill index, ASCII map, CLI cheatsheet, routing decision rules, event types, trade data index, Hyperliquid thematic universe, prediction markets).
+Supporting docs: `references/` (skill index, ASCII map, CLI cheatsheet, routing decision rules, event types, trade data index, Hyperliquid thematic universe, prediction markets).
 
 ## 1 - Defaults
 
@@ -35,6 +35,12 @@ The source page is the primary interface. Chat is for links and brief status onl
 ### Message discipline (hard rule)
 
 Maximum 3 chat messages per /trade run:
+
+OpenClaw wrapper override: when `/trade` is invoked through the bundled
+`trade_slash_dispatch` wrapper, the wrapper sends the initial acknowledgement,
+the progress link, and the final summary on behalf of the isolated worker. Keep
+the worker chat-silent except for the compact final summary. Claude Code and
+Codex direct runs should still follow the table below.
 
 | # | When | Content |
 |---|---|---|
@@ -64,7 +70,7 @@ Before running any script, verify `bun` is available (`command -v bun`). If miss
 Run before every `/trade`:
 
 ```bash
-bun run skill/scripts/onboard.ts
+bun run scripts/onboard.ts
 # Returns: { status, env_path, keys, handle?, profile_url? }
 ```
 
@@ -96,7 +102,7 @@ If `status` is `"failed"`, stop and show the error. Do not proceed without a wor
 Primary extraction:
 
 ```bash
-bun run skill/scripts/extract.ts "URL"
+bun run scripts/extract.ts "URL"
 # Returns: { source, word_count, saved_to, title?, published_at?, channel_handle?, description?, duration_seconds?, image_files? }
 # YouTube: transcript omitted from output; read the file at saved_to.
 # Tweet images: downloaded to local files listed in image_files[]. Read them for visual context.
@@ -105,7 +111,7 @@ bun run skill/scripts/extract.ts "URL"
 Create the source page as soon as you know the source metadata:
 
 ```bash
-bun run skill/scripts/create-source.ts '{ "url": "...", "title": "...", "platform": "...", "author_handle": "...", "author_avatar_url": "...", "source_date": "...", "source_images": [...], "body_text": "...", "word_count": N, "duration_seconds": N, "speakers_count": N }'
+bun run scripts/create-source.ts '{ "url": "...", "title": "...", "platform": "...", "author_handle": "...", "author_avatar_url": "...", "source_date": "...", "source_images": [...], "body_text": "...", "word_count": N, "duration_seconds": N, "speakers_count": N }'
 # Returns: { source_id, source_url, status: "processing", run_id }
 ```
 
@@ -132,7 +138,7 @@ bun run skill/scripts/create-source.ts '{ "url": "...", "title": "...", "platfor
 Status update payload shape:
 
 ```bash
-bun run skill/scripts/status.ts <source_id> '{ "event_type": "status", "data": { "message": "..." } }'
+bun run scripts/status.ts <source_id> '{ "event_type": "status", "data": { "message": "..." } }'
 ```
 
 ### 5 - Enrich
@@ -148,7 +154,7 @@ Runs after the source page exists and the user has a live link. Runs before thes
 - Enriched metadata is used in trade posts (source page author stays as-is).
 
 #### Dense source enrichment
-→ Read `skill/references/dense.md` for diarization, speaker identity, and transcript handling. Sparse sources skip to §6.
+→ Read `references/dense.md` for diarization, speaker identity, and transcript handling. Sparse sources skip to §6.
 
 - Avatars not in scope: backend auto-resolves via `ensureAuthor` + `enqueueAssetJob`.
 
@@ -157,7 +163,7 @@ Runs after the source page exists and the user has a live link. Runs before thes
 If enrichment resolved new metadata (author handle, source date, speakers, or thumbnail), push it now so the source page updates before thesis extraction:
 
 ```bash
-bun run skill/scripts/update-source.ts <source_id> --run-id <run_id> '{ "author_handle": "...", "source_date": "...", "thumbnail_url": "...", "speakers": [...] }'
+bun run scripts/update-source.ts <source_id> --run-id <run_id> '{ "author_handle": "...", "source_date": "...", "thumbnail_url": "...", "speakers": [...] }'
 ```
 
 ### 6 - Theses
@@ -168,8 +174,8 @@ Read the canonical source artifact and find every tradeable thesis.
 A thesis is a directional belief about what changes and what that means for price.
 
 #### Extraction
-- **Dense source** (podcast, article, PDF): → read `skill/references/dense.md` for three-pass extraction, thesis map, parallelization, and chunking.
-- **Sparse source** (tweet, user thesis, screenshot): → read `skill/references/sparse.md`. Handles extraction through routing (§6-§9). Resume at §10 Post.
+- **Dense source** (podcast, article, PDF): → read `references/dense.md` for three-pass extraction, thesis map, parallelization, and chunking.
+- **Sparse source** (tweet, user thesis, screenshot): → read `references/sparse.md`. Handles extraction through routing (§6-§9). Resume at §10 Post.
 
 Both paths use the thesis schema and save commands below.
 
@@ -220,21 +226,21 @@ Save all theses from extraction in one batch call (pass `--total` on first save 
 
 ```bash
 # Preferred: batch save all theses at once:
-echo '[{...}, {...}]' | bun run skill/scripts/batch-save.ts --run-id <run_id> --total 5
+echo '[{...}, {...}]' | bun run scripts/batch-save.ts --run-id <run_id> --total 5
 # Returns: [{ id, index }, ...]
 
 # Individual save (when extracting one at a time):
-bun run skill/scripts/save.ts --run-id <run_id> --total 5 '<thesis JSON>'
+bun run scripts/save.ts --run-id <run_id> --total 5 '<thesis JSON>'
 # Returns: { id, file, count }
 
 # Update a saved thesis (used during routing):
-echo '<partial JSON>' | bun run skill/scripts/save.ts --run-id <run_id> --update <id>
+echo '<partial JSON>' | bun run scripts/save.ts --run-id <run_id> --update <id>
 ```
 
 Track the returned thesis IDs. You need every one for finalization.
 
 Before starting research, narrate the transition so the live page stays active:
-`bun run skill/scripts/stream-thought.ts --run-id <run_id> "Researching market context..."`
+`bun run scripts/stream-thought.ts --run-id <run_id> "Researching market context..."`
 
 Save and post return `{"ok": false, "error": "..."}` on validation errors (exit 0),
 so parallel calls are safe -- one failure does not cancel siblings. Always check the
@@ -243,7 +249,7 @@ Do not use routing difficulty as a filter at extraction time. Capture first, the
 
 ### 7 - Research
 
-Sparse sources: §7-§9 are handled in `skill/references/sparse.md`. Skip to §10.
+Sparse sources: §7-§9 are handled in `references/sparse.md`. Skip to §10.
 
 For each thesis, determine the best executable expression on supported venues.
 On adapter error, retry the failed step once. If it fails again, try an alternative ticker or skip the thesis.
@@ -263,20 +269,20 @@ Supported venues:
      tradeable instruments for the ideas in `who`. Your training data is stale for
      tickers and listings. Search to find what's actually available.
      Cite findings in `why` as { "text": "...", "url": "...", "origin": "research" }.
-   - **Instrument discovery** (`skill/scripts/discover.ts --query "<keywords>"`):
+   - **Instrument discovery** (`scripts/discover.ts --query "<keywords>"`):
      search available instruments across all venues (Hyperliquid + Polymarket) using
      terms from `who`. Works best with single concrete terms, not multi-word abstractions.
      Use `--catalog` for a full listing of non-crypto HL instruments.
      For HIP-3/non-crypto results, prefer entries whose `reference_symbols` and
      `routing_note` show the same ETF, benchmark, commodity, or private company
      the thesis is really about.
-   - **Source context** (`skill/scripts/source-excerpt.ts --run-id <run_id> --file <saved_to> --query "<thesis keywords>"`):
+   - **Source context** (`scripts/source-excerpt.ts --run-id <run_id> --file <saved_to> --query "<thesis keywords>"`):
      retrieve surrounding context from the original source for this thesis.
      After extraction splits a source into theses, adjacent details get lost.
      Use this to find what the author said around each claim: qualifications,
      supporting numbers, competitive landscape, or nuance that strengthens
      the derivation. Also use `--around "<exact quote>"` to expand a specific quote.
-2. **Route** (`skill/scripts/route.ts`): validate the best candidates
+2. **Route** (`scripts/route.ts`): validate the best candidates
    from both sources against supported venues and get pricing. Takes ticker symbols only.
 3. **Select and save**: pick the expression with the tightest link between the source
    quote and the instrument. The trade ideas in `who` are starting context, not decisions.
@@ -287,10 +293,10 @@ Supported venues:
 #### Venue upgrades
 - **ETFs and broad-sector stocks**: Hyperliquid often has a thematic index or
   commodity perp tracking the same underlying with leverage and no ETF overhead.
-  Run `discover.ts --query "<theme>"` to check. See `skill/references/hl-universe.md`.
+  Run `discover.ts --query "<theme>"` to check. See `references/hl-universe.md`.
 - **Event-driven theses**: Polymarket may have a binary contract that directly
   prices the catalyst. Run `discover.ts --query "<event keywords>"` to check.
-  See `skill/references/prediction-markets.md`.
+  See `references/prediction-markets.md`.
 - If a better venue exists, route there and present the original as an alternative.
 
 #### Requirements
@@ -405,7 +411,7 @@ available.
 #### Pricing
 
 ```bash
-bun run skill/scripts/route.ts --run-id <run_id> --thesis-id <id> TICKER direction --source-date "ISO-8601-datetime-or-YYYY-MM-DD" --horizon "timing"
+bun run scripts/route.ts --run-id <run_id> --thesis-id <id> TICKER direction --source-date "ISO-8601-datetime-or-YYYY-MM-DD" --horizon "timing"
 # Returns: { tool: "route", route: { ticker, direction, executable, selected_expression, alternatives, price_context, candidate_routes, note }, diagnostics }
 # selected_expression and candidate_routes include HIP-3 routing metadata (see routing.md).
 # price_context: { current_price, source_date, source_date_price, since_published_move_pct }
@@ -417,7 +423,7 @@ Use tool numbers directly. Do not estimate or recompute.
 After routing completes for a thesis, persist everything in one update: `who` (updated to final ticker), `route_status`, `route_evidence`, and `derivation` together:
 
 ```bash
-echo '<JSON with who + route_evidence + derivation>' | bun run skill/scripts/save.ts --run-id <run_id> --update <id>
+echo '<JSON with who + route_evidence + derivation>' | bun run scripts/save.ts --run-id <run_id> --update <id>
 ```
 
 This emits `thesis_routed` (or `thesis_dropped`) events automatically, updating the live source page with derivation data as each thesis resolves.
@@ -427,7 +433,7 @@ This emits `thesis_routed` (or `thesis_dropped`) events automatically, updating 
 Post each trade:
 
 ```bash
-echo '<JSON payload>' | bun run skill/scripts/post.ts --run-id <run_id>
+echo '<JSON payload>' | bun run scripts/post.ts --run-id <run_id>
 ```
 
 #### Post rules
@@ -440,7 +446,7 @@ echo '<JSON payload>' | bun run skill/scripts/post.ts --run-id <run_id>
 After all trade POSTs succeed, finalize the source explicitly:
 
 ```bash
-echo '{ "source_id": "...", "source_theses": [...], "source_summary": "...", "message": "All trades posted" }' | bun run skill/scripts/finalize-source.ts --run-id <run_id>
+echo '{ "source_id": "...", "source_theses": [...], "source_summary": "...", "message": "All trades posted" }' | bun run scripts/finalize-source.ts --run-id <run_id>
 ```
 
 #### Finalization

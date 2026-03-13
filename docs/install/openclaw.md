@@ -16,8 +16,10 @@ bridge plugin.
 This is OpenClaw-specific. Claude Code and Codex do not install or use it.
 
 What it does:
-- acknowledges `/trade` immediately
-- hands the real run off in background
+- acknowledges `/trade` immediately in your current chat
+- starts the real run in a separate background session so `/trade` does not pollute your main context
+- sends a progress link as soon as source creation finishes
+- sends only the compact final summary back to chat instead of intermediate worker chatter
 - remaps Telegram slash sessions back to the DM thread when needed
 
 Run this once after install, and again after every update:
@@ -29,7 +31,7 @@ bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
 What this does:
 - installs `openclaw-plugin/` via `openclaw plugins install --link`
 - ensures `plugins.allow` includes `trade-slash-wrapper`
-- restarts the OpenClaw gateway
+- lets OpenClaw detect the config change and reload automatically
 
 ## Verify
 
@@ -43,6 +45,11 @@ openclaw plugins info trade-slash-wrapper
 ```text
 /trade https://x.com/<handle>/status/<id>
 ```
+
+Expected chat flow:
+- immediate acknowledgement that the run started in the background
+- a progress link as soon as the source page is ready
+- one compact final summary when routing and posting finish
 
 X login is optional and should not block first run.
 

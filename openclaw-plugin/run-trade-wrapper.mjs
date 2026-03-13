@@ -2,5 +2,5 @@
 
 import { runWrapper } from "./run-trade-wrapper-lib.mjs";
 
-const exitCode = runWrapper(process.argv[2]);
+const exitCode = await runWrapper(process.argv[2]);
 process.exit(exitCode);

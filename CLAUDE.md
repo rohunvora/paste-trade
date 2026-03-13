@@ -43,7 +43,7 @@ Extract source → Create source page → Enrich metadata → Extract theses →
 - **`adapters/`** — Market API adapters. `route-fields.ts` has shared coercion utilities for route responses. `hyperliquid/` contains HL-specific adapter logic.
 - **`shared/trade-pricing.ts`** — Price canonicalization (`publish_price` vs `source_date_price` vs `created_at_price`), `"now"` sentinel resolution.
 - **`references/`** — Supplementary docs loaded by SKILL.md at runtime (dense/sparse extraction rules, HL universe, prediction markets, routing decisions, event types).
-- **`openclaw-plugin/`** — OpenClaw-only async command bridge. Makes `/trade` acknowledge instantly in chat while the real run continues in background.
+- **`openclaw-plugin/`** — OpenClaw-only async command bridge. Runs `/trade` in a fresh background session, sends the progress link from the wrapper, and keeps worker chatter out of the main chat.
 
 ### Data flow
 

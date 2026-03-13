@@ -5,6 +5,23 @@ Versioning note:
 - the March 5 rewrite was previously tracked internally as `2.0.0`
 - install commands use the bare repo path (no version tag)
 
+## [1.2.1] - 2026-03-13
+
+OpenClaw wrapper reliability and chat UX fixes.
+
+### Fixed
+
+- `openclaw-plugin/run-trade-wrapper-lib.mjs` — runs `/trade` in a fresh per-run session, sends the progress link directly after source creation, waits for real runtime evidence before marking the run complete, and forwards only the compact final summary back to chat
+- `openclaw-plugin/run-trade-wrapper.mjs` — awaits the async wrapper exit path so the live-link watcher does not crash before sending the progress link
+- `openclaw-plugin/trade-slash-dispatch-lib.mjs` — resolves installed-vs-dev skill layouts correctly and injects wrapper-specific system instructions so the worker stays silent until final summary
+- `SKILL.md` — fixes public-repo path examples from `skill/scripts/...` to `scripts/...` and from `skill/references/...` to `references/...`
+
+### Changed
+
+- OpenClaw chat flow is now: immediate background acknowledgement -> progress link -> final summary
+- OpenClaw wrapper runs no longer spill intermediate model chatter like routing or posting updates into the main chat
+- OpenClaw install docs now reflect automatic gateway reload after wrapper setup
+
 ## [1.2.0] - 2026-03-11
 
 Polymarket pipeline, dense/sparse reference docs, streaming progress, and bug fixes.
