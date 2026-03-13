@@ -133,13 +133,23 @@ async function main() {
 
   // Stream what was found
   if (parsed.mode === "query") {
-    const data = result as { results?: Array<{ ticker?: string; platform?: string; instrument?: string; question?: string }> };
-    const instruments = data.results?.slice(0, 3) ?? [];
-    if (instruments.length > 0) {
-      const summary = instruments
-        .map(r => r.question ? `"${r.question.slice(0, 50)}"` : `${r.ticker} (${r.platform} ${r.instrument})`)
-        .join(", ");
-      streamLog(`Found: ${summary}`, logOpts);
+    const data = result as {
+      hyperliquid?: { search_results?: Array<{ symbol?: string; description?: string }> };
+      polymarket?: { markets?: Array<{ question?: string }> };
+    };
+    const hlResults = data.hyperliquid?.search_results ?? [];
+    const pmResults = data.polymarket?.markets ?? [];
+    const totalFound = hlResults.length + pmResults.length;
+
+    if (totalFound > 0) {
+      const parts: string[] = [];
+      for (const r of hlResults.slice(0, 2)) {
+        parts.push(r.symbol ?? "?");
+      }
+      for (const r of pmResults.slice(0, 2)) {
+        parts.push(`"${(r.question ?? "?").slice(0, 50)}"`);
+      }
+      streamLog(`Found ${totalFound}: ${parts.join(", ")}`, logOpts);
     } else {
       streamLog(`No instruments found for "${parsed.query}"`, logOpts);
     }
