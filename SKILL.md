@@ -65,6 +65,7 @@ If `status` is `"failed"`, stop and show the error. Do not proceed without a wor
 ### 3 - Classify
 
 - URL source: extract first.
+- PDF source: read the PDF yourself (do not pass to extract.ts — it cannot parse PDFs). Use the text you read as the source artifact for thesis extraction.
 - User-typed thesis: their words are the thesis. Skip extraction. Their exact input is the `headline_quote`. Do not paraphrase it. The AI interpretation goes in `thesis`.
 - If URL is `paste.trade/s/:id` or `paste.trade/t/:id`, treat as normal source input.
 
