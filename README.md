@@ -1,13 +1,13 @@
 # paste-trade-skill
 
-Public `/trade` skill runtime for [paste.trade](https://paste.trade).
+This is a skill for your AI agent. It adds the `/trade` command.
 
-Finds every tradeable thesis in a source and routes each to an executable trade. Works with tweets, podcasts, articles, screenshots, hunches, and market observations.
+Finds every tradeable thesis in a source and routes each to an executable trade on [paste.trade](https://paste.trade). Works with tweets, podcasts, articles, screenshots, hunches, and market observations.
 
 ## Supported clients
 
-- OpenClaw
 - Claude Code
+- OpenClaw
 - Codex
 
 ## Install
@@ -34,11 +34,13 @@ Paste the repo URL into your agent:
 https://github.com/rohunvora/paste-trade-skill
 ```
 
-Then install/enable the bundled wrapper plugin:
+Then run the wrapper setup from the installed skill directory:
 
 ```bash
-bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
+bash <skill-install-path>/scripts/setup-openclaw-wrapper.sh
 ```
+
+The agent knows where it installed the skill — use that path.
 
 ## Prerequisites
 
@@ -91,10 +93,10 @@ Paste the repo URL into your agent again:
 https://github.com/rohunvora/paste-trade-skill
 ```
 
-Then rerun wrapper setup:
+Then rerun wrapper setup from the installed skill directory:
 
 ```bash
-bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
+bash <skill-install-path>/scripts/setup-openclaw-wrapper.sh
 ```
 
 ## Account portability

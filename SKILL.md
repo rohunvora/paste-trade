@@ -37,6 +37,8 @@ Supporting docs: `references/` (skill index, ASCII map, CLI cheatsheet, routing 
 
 ## Preflight
 
+Before running any script, verify `bun` is available (`command -v bun`). If missing, install it: `curl -fsSL https://bun.sh/install | bash`, then restart the shell.
+
 Run before every `/trade`:
 
 ```bash

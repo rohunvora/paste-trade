@@ -114,7 +114,8 @@ export function getPreferredEnvWritePath(): string {
   const gitRoot = getGitRootFromCwd();
   if (gitRoot) return join(gitRoot, ".env");
 
-  return join(process.cwd(), ".env");
+  // Fall back to the skill's own directory so keys land where readEnvValue will find them
+  return join(SKILL_ROOT, ".env");
 }
 
 export function readEnvValue(key: string): string | undefined {
