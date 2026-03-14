@@ -34,7 +34,7 @@ Uses the same section references as `SKILL.md`, `skill-index.md`, `dense.md`, an
           raw URL -> extract output -> source run          |
                               |                            |
                               +---> [2 - Chat UX]          |
-                              |     send live link         |
+                              | send live link + continue  |
                               |                            |
                               v                            |
                        [5 - Enrich | lines 87-110]         |

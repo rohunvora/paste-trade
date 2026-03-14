@@ -39,8 +39,12 @@ Maximum 3 chat messages per /trade run:
 OpenClaw wrapper override: when `/trade` is invoked through the bundled
 `trade_slash_dispatch` wrapper, the wrapper sends the initial acknowledgement,
 the progress link, and the final summary on behalf of the isolated worker. Keep
-the worker chat-silent except for the compact final summary. Claude Code and
-Codex direct runs should still follow the table below.
+the worker chat-silent except for the compact final summary.
+
+Direct-client rule (Claude Code, Codex, terminal): after `create-source.ts`
+returns, send `Watch live: {source_url}` immediately and then continue the
+pipeline in the same run. Do not stop, do not wait for user input, and do not
+require a second `/trade` invocation.
 
 | # | When | Content |
 |---|---|---|
@@ -50,14 +54,14 @@ Codex direct runs should still follow the table below.
 
 For transcript sources, message 1 may add: `Longer videos can take a few minutes.`
 
-### Mandatory reply break after source creation
+### Mandatory continuation after source creation
 
 After running `create-source.ts`, you MUST:
-1. Reply to the user with ONLY the Watch live link.
-2. **End your response.** Do not continue processing in the same message.
-3. Continue the pipeline in your next response.
+1. Send the canonical Watch live link immediately.
+2. Continue the pipeline right away in the same run unless an OpenClaw wrapper is handling delivery for you.
+3. Never treat the Watch live link as the end of the `/trade` run.
 
-This prevents the link from being delayed while the pipeline runs. The user should receive the link within seconds of source creation, not minutes later bundled with trade results.
+The user should receive the link within seconds of source creation, not minutes later bundled with trade results, but the run must still continue through extraction, routing, posting, and finalization.
 
 ### What stays off chat
 
@@ -120,7 +124,7 @@ bun run scripts/create-source.ts '{ "url": "...", "title": "...", "platform": ".
 1. Run `extract.ts`.
 2. **If `image_files` are present in the output, read them now.** Charts, screenshots, and diagrams are critical source context — use them to inform thesis extraction, ticker identification, and derivation reasoning. Describe what you see.
 3. If YouTube with multiple speakers with competing or independent market views (panels, debates, co-hosted roundtables — not single-guest interviews) and `GEMINI_API_KEY` is missing: ask the user now — before creating the source. Offer to paste a key or continue without speaker attribution.
-4. Run `create-source.ts`. **Reply with the Watch live link and end your response.** Continue the pipeline in your next message. (See §2 mandatory reply break.)
+4. Run `create-source.ts`. **Send the Watch live link immediately, then continue the pipeline in the same run. Do not stop or wait for user input.** If an OpenClaw wrapper is handling delivery, keep going silently after source creation. (See §2 Chat UX.)
 5. Do NOT read the `saved_to` file before this point.
 6. Only after source creation, run enrichment, transcript reads, and uploads.
 

@@ -5,6 +5,15 @@ Versioning note:
 - the March 5 rewrite was previously tracked internally as `2.0.0`
 - install commands use the bare repo path (no version tag)
 
+## [1.2.2] - 2026-03-13
+
+Direct-client continuation fix after source creation.
+
+### Fixed
+
+- `SKILL.md` — direct clients now send the `Watch live` link and continue the same `/trade` run instead of stopping at source creation
+- `references/index/skill-index.md` and `references/index/skill-ascii.md` — summary docs now match the continuation rule instead of the old stop-after-link behavior
+
 ## [1.2.1] - 2026-03-13
 
 OpenClaw wrapper reliability and chat UX fixes.
