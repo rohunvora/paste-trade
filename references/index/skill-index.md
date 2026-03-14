@@ -76,7 +76,7 @@ Core data objects:
 | 2a  | 32   | Keep chat updates operational and brief      | in: live run updates                 |          |
 | 2b  | 33   | First status: "Running /trade now..."        | in: run start                        |          |
 | 2c  | 34   | Transcript sources: set duration expectation | in: transcript-source classification | dense.md |
-| 2d  | 35   | After source creation: send live link, then keep going | in: `source_url` from 4b     |          |
+| 2d  | 35   | After source creation: send live link unless runtime already handles it, then keep going | in: `source_url` from 4b |          |
 
 
 ## 3 - Classify
@@ -97,7 +97,7 @@ Execution sequence:
 | ID  | Line | Rule                                                         | Flow                            | File |
 | --- | ---- | ------------------------------------------------------------ | ------------------------------- | ---- |
 | 4a  | 64   | Run extract.ts first                                         | in: URL source (3a/3c)          |      |
-| 4b  | 65   | Immediately run create-source.ts, send live URL, keep running | in: extract output            |      |
+| 4b  | 65   | Immediately run create-source.ts, send live URL unless runtime already handles it, keep running | in: extract output |      |
 | 4c  | 66   | Do NOT read saved_to before source creation                  | in: extract `saved_to`          |      |
 | 4d  | 67   | Only after source creation: enrichment, transcripts, uploads | in: source run + extract output |      |
 
@@ -113,7 +113,7 @@ Notes:
 | 4h  | 74   | Save run_id, thread through every later call              | in: source run response           |          |
 | 4i  | 75   | Internal tracing: pass run_id from prompt                 | in: prompt `run_id`               |          |
 | 4j  | 76   | Use canonical live-link line from Chat UX                 | in: 2d + `source_url`             |          |
-| 4k  | 84   | Tell user "Watch live: {source_url}" and continue the run | in: `source_url`                |          |
+| 4k  | 84   | Tell user "Watch live: {source_url}" unless runtime already handles it, and continue the run | in: `source_url` |          |
 
 
 ## 5 - Enrich
@@ -435,4 +435,3 @@ Notes:
 | 13b | 482  | Every number must come from a tool    | in: tool outputs (extract/route/post) |      |
 | 13c | 483  | Bear theses -> short-side instruments | in: bearish thesis direction          |      |
 | 13d | 484  | Flag illiquid contracts               | in: discover/route liquidity signals  |      |
-

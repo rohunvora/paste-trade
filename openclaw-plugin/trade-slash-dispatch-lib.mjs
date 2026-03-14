@@ -86,11 +86,9 @@ export function buildTradeSystemPrompt(input, runId) {
   const lines = [
     `IMPORTANT: Your FIRST action must be a tool call — do not generate any text before calling a tool.`,
     `Read the skill file at ${SKILL_FILE_PATH} and follow its instructions for this trade request.`,
-    `Runtime path mapping: any \`skill/scripts/...\` examples in SKILL.md map to absolute scripts under ${SCRIPTS_DIR_PATH}. Any \`skill/references/...\` examples map to ${REFERENCES_DIR_PATH}. Use those absolute paths so this run works in isolated wrapper sessions across installed and dev-track layouts.`,
-    `Wrapper note: the user already received the initial acknowledgement ("Running /trade in the background now. I'll send a progress link shortly."). Do not repeat it.`,
-    `Wrapper delivery override (mandatory): after \`bun run ${SCRIPTS_DIR_PATH}/create-source.ts\` succeeds, do NOT send \`Watch live: {source_url}\` yourself. The wrapper delivers the progress link immediately after source creation and sends the final summary at the end. Do not send chat progress/status messages like "Now let me..." or "All posted...". Your only plain-text assistant message in this run should be the compact final summary (or a brief no-trade result) after all posting/finalization work completes.`,
-    `Execution order (mandatory): first run \`bun run ${SCRIPTS_DIR_PATH}/onboard.ts\`. For URL or source inputs, run \`bun run ${SCRIPTS_DIR_PATH}/extract.ts\` first. As soon as you have url/title/platform/author_handle/source_date, run \`bun run ${SCRIPTS_DIR_PATH}/create-source.ts\`. Immediately continue with \`diarize.ts\`, transcript reads, \`save.ts\`, \`route.ts\`, \`post.ts\`, and \`finalize-source.ts\` from ${SCRIPTS_DIR_PATH}.`,
-    `Do not rely on legacy shorthand like \`transcript/extract.ts\` or \`board/create-source.ts\`. Use the resolved scripts directory above.`,
+    `When SKILL.md tells you to run a script or read a reference file, resolve it against these absolute runtime directories: scripts under ${SCRIPTS_DIR_PATH} and references under ${REFERENCES_DIR_PATH}.`,
+    `Wrapper delivery overrides the shared chat rules: the user already received the initial acknowledgement, and the wrapper will deliver the Watch live link immediately after \`create-source.ts\` succeeds. Do not repeat the acknowledgement and do not send \`Watch live: {source_url}\` yourself.`,
+    `Keep the isolated worker chat-silent while the pipeline runs. Do not send progress/status chatter like "Now let me..." or "All posted...". Your only plain-text assistant message in this run should be the compact final summary, or a brief no-trade result, after all posting and finalization work completes.`,
   ];
   if (typeof runId === "string" && runId.trim()) {
     lines.push(

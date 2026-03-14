@@ -5,6 +5,16 @@ Versioning note:
 - the March 5 rewrite was previously tracked internally as `2.0.0`
 - install commands use the bare repo path (no version tag)
 
+## [1.2.3] - 2026-03-13
+
+Prompt-boundary cleanup for direct clients and the OpenClaw wrapper.
+
+### Fixed
+
+- `SKILL.md` — removes OpenClaw-specific branching from the shared skill body; the common contract is now client-agnostic: send the live link immediately unless the runtime handles it, then keep going in the same run
+- `openclaw-plugin/trade-slash-dispatch-lib.mjs` — trims the wrapper overlay down to true delivery overrides instead of re-explaining the whole pipeline
+- `references/index/skill-index.md` and `references/index/skill-ascii.md` — summary docs now reflect the runtime-agnostic continuation rule
+
 ## [1.2.2] - 2026-03-13
 
 Direct-client continuation fix after source creation.
