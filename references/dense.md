@@ -63,6 +63,12 @@ called out, or contrarian positions they argued against.
 - Use surrounding transcript context to sharpen.
 - Use web search if needed to clarify what's tradeable.
 
+**Stream your first-pass analysis** before saving. This is what the user reads while research runs:
+
+```bash
+bun run scripts/stream-thought.ts --run-id <run_id> "<your first-pass breakdown — the beliefs you found, the framework, what's interesting>"
+```
+
 **Save all theses in one batch:**
 
 ```bash
