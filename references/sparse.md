@@ -25,8 +25,7 @@ Sparse source exact words become `headline_quote` and `quotes[]` never paraphras
         "subject_label": "<asset name>",
         "ticker_tested": "<final ticker>",
         "executable": true,
-        "publish_price": "<from route price_context>",
-        "source_date_price": "<from route price_context>"
+        "author_price": "<from route price_context>"
       }
     ],
     "selected_expression": {
@@ -35,9 +34,7 @@ Sparse source exact words become `headline_quote` and `quotes[]` never paraphras
       "instrument": "perps|shares|polymarket",
       "platform": "hyperliquid|robinhood|polymarket",
       "trade_type": "direct|derived",
-      "publish_price": "<from route price_context>",
-      "source_date_price": "<from route price_context>",
-      "since_published_move_pct": "<from route price_context>"
+      "author_price": "<from route price_context>"
     }
   },
   "derivation": { "explanation": "...", "segments": [...], "steps": [...] }
@@ -62,7 +59,7 @@ then run the tree below per thesis.
 SPARSE SOURCE
 │
 ├─ Is this breaking news or new information?
-│  YES → Read `references/fast.md` and follow it.
+│  YES → Read `skill/references/fast.md` and follow it.
 │    Returns to SKILL.md §10 Post when done.
 │  NO → Continue below.
 │

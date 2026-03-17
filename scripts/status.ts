@@ -3,22 +3,22 @@
  * Used during live processing to show progress to viewers.
  *
  * Usage:
- *   bun run scripts/status.ts '<source_id>' '<JSON event data>'
+ *   bun run skill/scripts/status.ts '<source_id>' '<JSON event data>'
  *
  * Event data: { event_type, data: { message, step?, progress?, total?, ... } }
  *   event_type: "status" | "extraction_complete" | "thesis_found" | "trade_routed" | "complete" | "failed"
  *
  * Examples:
- *   bun run scripts/status.ts 'abc123' '{ "event_type": "status", "data": { "message": "Extracting transcript..." } }'
- *   bun run scripts/status.ts 'abc123' '{ "event_type": "thesis_found", "data": { "message": "Google zero profit in 2027", "progress": 1, "total": 5 } }'
- *   bun run scripts/status.ts 'abc123' '{ "event_type": "complete", "data": { "message": "All trades posted", "source_theses": [...] } }'
+ *   bun run skill/scripts/status.ts 'abc123' '{ "event_type": "status", "data": { "message": "Extracting transcript..." } }'
+ *   bun run skill/scripts/status.ts 'abc123' '{ "event_type": "thesis_found", "data": { "message": "Google zero profit in 2027", "progress": 1, "total": 5 } }'
+ *   bun run skill/scripts/status.ts 'abc123' '{ "event_type": "complete", "data": { "message": "All trades posted", "source_theses": [...] } }'
  */
 
 const sourceId = process.argv[2];
 const eventPayload = process.argv[3];
 
 if (!sourceId || !eventPayload) {
-  console.error("Usage: bun run scripts/status.ts '<source_id>' '<JSON event>'");
+  console.error("Usage: bun run skill/scripts/status.ts '<source_id>' '<JSON event>'");
   process.exit(1);
 }
 

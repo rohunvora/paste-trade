@@ -3,11 +3,11 @@
  * Extraction Store — saves and updates thesis objects.
  *
  * Save (extraction): appends new thesis to JSONL.
- *   bun run scripts/save.ts '<thesis JSON>'
- *   cat thesis.json | bun run scripts/save.ts --stdin
+ *   bun run skill/scripts/save.ts '<thesis JSON>'
+ *   cat thesis.json | bun run skill/scripts/save.ts --stdin
  *
  * Update (routing): merges new fields into existing record by ID.
- *   bun run scripts/save.ts --update <id> '<partial JSON>'
+ *   bun run skill/scripts/save.ts --update <id> '<partial JSON>'
  *   Merges top-level fields. Nested objects are shallow-merged.
  */
 
@@ -147,7 +147,7 @@ async function updateRecord(id: string, partial: Record<string, unknown>): Promi
           direction: selectedExpr?.direction ?? null,
           instrument: selectedExpr?.instrument ?? null,
           platform: selectedExpr?.platform ?? null,
-          publish_price: selectedExpr?.publish_price ?? selectedExpr?.source_date_price ?? null,
+          author_price: selectedExpr?.author_price ?? null,
           explanation: derivation?.explanation ?? null,
         }, { runId });
       } else if (routeStatus === "unrouted") {

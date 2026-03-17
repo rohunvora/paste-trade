@@ -2,8 +2,8 @@
  * Explicitly finalize a source processing run.
  *
  * Usage:
- *   echo '{ "source_id": "...", "source_theses": [...], "source_summary": "...", "message": "All trades posted" }' | bun run scripts/finalize-source.ts --run-id <runId>
- *   bun run scripts/finalize-source.ts --run-id <runId> '{ "source_id": "...", "source_theses": [...] }'
+ *   echo '{ "source_id": "...", "source_theses": [...], "source_summary": "...", "message": "All trades posted" }' | bun run skill/scripts/finalize-source.ts --run-id <runId>
+ *   bun run skill/scripts/finalize-source.ts --run-id <runId> '{ "source_id": "...", "source_theses": [...] }'
  */
 
 import { existsSync } from "fs";
@@ -66,7 +66,7 @@ applyRunId(runId);
 let payload = args[0];
 if (!payload) payload = await Bun.stdin.text();
 if (!payload?.trim()) {
-  console.error("Usage: bun run scripts/finalize-source.ts --run-id <runId> '<JSON payload>' (or pipe via stdin)");
+  console.error("Usage: bun run skill/scripts/finalize-source.ts --run-id <runId> '<JSON payload>' (or pipe via stdin)");
   process.exit(1);
 }
 

@@ -4,7 +4,7 @@
  * Pushes thesis_found events with staggered delays for progressive reveal.
  *
  * Usage:
- *   echo '[{thesis1}, {thesis2}, ...]' | bun run scripts/batch-save.ts
+ *   echo '[{thesis1}, {thesis2}, ...]' | bun run skill/scripts/batch-save.ts
  *
  * Returns: [{ "id": "be5378b3", "index": 0 }, { "id": "a91c44d2", "index": 1 }, ...]
  *

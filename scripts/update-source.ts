@@ -3,8 +3,8 @@
  * Push enriched source metadata to the source page.
  *
  * Usage:
- *   bun run scripts/update-source.ts <source_id> --run-id <run_id> '{ "author_handle": "...", "source_date": "...", "thumbnail_url": "..." }'
- *   echo '{ ... }' | bun run scripts/update-source.ts <source_id> --run-id <run_id>
+ *   bun run skill/scripts/update-source.ts <source_id> --run-id <run_id> '{ "author_handle": "...", "source_date": "...", "thumbnail_url": "..." }'
+ *   echo '{ ... }' | bun run skill/scripts/update-source.ts <source_id> --run-id <run_id>
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
@@ -16,7 +16,7 @@ applyRunId(runId);
 
 const sourceId = args[0];
 if (!sourceId) {
-  console.error("Usage: bun run scripts/update-source.ts <source_id> --run-id <run_id> '<JSON>'");
+  console.error("Usage: bun run skill/scripts/update-source.ts <source_id> --run-id <run_id> '<JSON>'");
   process.exit(1);
 }
 

@@ -6,8 +6,8 @@
  * that break shell quoting).
  *
  * Usage:
- *   bun run scripts/post.ts '<JSON payload>'
- *   echo '<JSON>' | bun run scripts/post.ts
+ *   bun run skill/scripts/post.ts '<JSON payload>'
+ *   echo '<JSON>' | bun run skill/scripts/post.ts
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
@@ -25,7 +25,7 @@ if (!payload) {
   payload = await Bun.stdin.text();
 }
 if (!payload?.trim()) {
-  console.error("Usage: bun run scripts/post.ts '<JSON payload>' (or pipe via stdin)");
+  console.error("Usage: bun run skill/scripts/post.ts '<JSON payload>' (or pipe via stdin)");
   process.exit(1);
 }
 payload = payload.trim();
@@ -43,15 +43,13 @@ interface SavedExtractionRecord {
   id?: string;
   run_id?: string;
   thesis?: unknown;
-  source_date?: unknown;
+  author_date?: unknown;
   headline?: string;
   quotes?: unknown;
   route_status?: string;
   routed?: boolean;
   who?: unknown;
   route_evidence?: unknown;
-  headline_quote?: unknown;
-  derivation?: unknown;
 }
 
 function normalizeText(value: unknown): string {
@@ -71,12 +69,8 @@ function stripVenuePrefix(ticker: string): string {
 
 // toFiniteNumber imported from shared/trade-pricing
 
-function applyCanonicalPublishPrice(tradeBody: Record<string, unknown>): void {
-  const sourceDatePrice = toFiniteNumber(tradeBody.source_date_price);
-  if (sourceDatePrice != null && sourceDatePrice > 0) {
-    tradeBody.publish_price = sourceDatePrice;
-  }
-}
+// applyCanonicalAuthorPrice removed — exact_author_price field was dropped.
+// author_price is now the single canonical price column.
 
 function normalizeIsoDateTime(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -187,9 +181,9 @@ function hydratePayloadFromSavedExtraction(
     tradeBody.thesis = extracted.thesis.trim();
   }
 
-  const normalizedSourceDate = normalizeIsoDateTime(tradeBody.source_date)
-    ?? normalizeIsoDateTime(extracted.source_date);
-  if (normalizedSourceDate) tradeBody.source_date = normalizedSourceDate;
+  const normalizedAuthorDate = normalizeIsoDateTime(tradeBody.author_date)
+    ?? normalizeIsoDateTime(extracted.author_date);
+  if (normalizedAuthorDate) tradeBody.author_date = normalizedAuthorDate;
 
   if (typeof tradeBody.headline_quote !== "string" || !tradeBody.headline_quote.trim()) {
     if (typeof extracted.headline_quote === "string" && extracted.headline_quote.trim()) {
@@ -203,48 +197,38 @@ function hydratePayloadFromSavedExtraction(
   }
 
   const check = resolveDirectCheckForTicker(extracted, normalizeTicker(tradeBody.ticker));
-  const selectedEntryPrice = toFiniteNumber(selected?.publish_price);
-  const checkEntryPrice = toFiniteNumber(check?.publish_price);
-  if (toFiniteNumber(tradeBody.publish_price) == null) {
+  const selectedEntryPrice = toFiniteNumber(selected?.author_price);
+  const checkEntryPrice = toFiniteNumber(check?.author_price);
+  if (toFiniteNumber(tradeBody.author_price) == null) {
     const candidateEntry = selectedEntryPrice ?? checkEntryPrice;
-    if (candidateEntry != null && candidateEntry > 0) tradeBody.publish_price = candidateEntry;
+    if (candidateEntry != null && candidateEntry > 0) tradeBody.author_price = candidateEntry;
   }
 
-  const selectedSourceDatePrice = toFiniteNumber(selected?.source_date_price);
-  const checkSourceDatePrice = toFiniteNumber(check?.source_date_price);
-  if (toFiniteNumber(tradeBody.source_date_price) == null) {
-    const candidateSource = selectedSourceDatePrice ?? checkSourceDatePrice;
-    if (candidateSource != null && candidateSource > 0) tradeBody.source_date_price = candidateSource;
-  }
-
-  const selectedSince = toFiniteNumber(selected?.since_published_move_pct);
-  const checkSince = toFiniteNumber(check?.since_published_move_pct);
-  if (toFiniteNumber(tradeBody.since_published_move_pct) == null) {
-    const candidateSince = selectedSince ?? checkSince;
-    if (candidateSince != null) tradeBody.since_published_move_pct = candidateSince;
-  }
+  // exact_author_price and author_to_posted_pct were dropped from the schema.
+  // author_price is the single canonical price column, set above.
 }
 
 interface BackendAssessMinimal {
   results?: Array<{
-    source_date_price?: number;
-    since_published_move_pct?: number;
+    author_price?: number;
   }>;
 }
 
+/** Enrich author_price from the assess endpoint if missing.
+ *  The assess endpoint returns the historical price at author_date for the given ticker.
+ *  Only needed for stocks/perps — PM trades set author_price from the contract price. */
 async function enrichBaselineViaAssess(
   tradeBody: Record<string, unknown>,
   baseUrl: string,
   apiKey: string,
 ): Promise<void> {
   const ticker = normalizeTicker(tradeBody.ticker);
-  const sourceDate = normalizeIsoDateTime(tradeBody.source_date);
-  if (!ticker || !sourceDate) return;
-  tradeBody.source_date = sourceDate;
+  const authorDate = normalizeIsoDateTime(tradeBody.author_date);
+  if (!ticker || !authorDate) return;
+  tradeBody.author_date = authorDate;
 
-  const hasSourceDatePrice = toFiniteNumber(tradeBody.source_date_price) != null;
-  const hasSincePublishedMove = toFiniteNumber(tradeBody.since_published_move_pct) != null;
-  if (hasSourceDatePrice && hasSincePublishedMove) return;
+  // Skip if author_price is already set
+  if (toFiniteNumber(tradeBody.author_price) != null) return;
 
   const direction = (typeof tradeBody.direction === "string" && tradeBody.direction.toLowerCase() === "short")
     ? "short"
@@ -261,7 +245,7 @@ async function enrichBaselineViaAssess(
         tickers: [ticker],
         direction,
         capital: 100_000,
-        source_date: sourceDate,
+        source_date: authorDate,
         subject_kind: "asset",
         run_id: runId ?? undefined,
       }),
@@ -277,13 +261,9 @@ async function enrichBaselineViaAssess(
     const row = Array.isArray(parsed.results) ? parsed.results[0] : null;
     if (!row) return;
 
-    const sourceDatePrice = toFiniteNumber(row.source_date_price);
-    const sincePublished = toFiniteNumber(row.since_published_move_pct);
-    if (!hasSourceDatePrice && sourceDatePrice != null && sourceDatePrice > 0) {
-      tradeBody.source_date_price = sourceDatePrice;
-    }
-    if (!hasSincePublishedMove && sincePublished != null) {
-      tradeBody.since_published_move_pct = sincePublished;
+    const assessPrice = toFiniteNumber(row.author_price);
+    if (assessPrice != null && assessPrice > 0) {
+      tradeBody.author_price = assessPrice;
     }
   } catch (error) {
     console.error(`[board] baseline assess error: ${error instanceof Error ? error.message : String(error)}`);
@@ -448,49 +428,46 @@ if (!apiKey) {
 // Skip /api/skill/assess enrichment (Yahoo Finance) which would corrupt them.
 const platform = typeof body.platform === "string" ? body.platform : "";
 if (platform === "polymarket") {
+  // Capture pm_side before normalizing direction (YES/NO → long/short)
+  if (body.direction === "yes" || body.direction === "no") {
+    body.pm_side = body.direction;
+  }
   // Normalize PM direction: skill LLM may output "yes"/"no" instead of "long"/"short"
   if (body.direction === "yes") body.direction = "long";
   if (body.direction === "no") body.direction = "short";
   // Normalize PM instrument: must be "polymarket" for frontend display (YES/NO, cent pricing, PmBlock)
   if (typeof body.instrument === "string" && body.instrument !== "polymarket") body.instrument = "polymarket";
 
-  // buy_price_usd is always the YES token price (Polymarket convention).
-  // source_date_price and publish_price stay on the YES scale so P&L math
-  // works against the live price endpoint (which also returns the YES price).
-  // Only market_implied_prob is direction-aware (drives the % chance display).
-  const buyPrice = toFiniteNumber(body.buy_price_usd);
+  // Contract price: pm_yes_no_price is the YES token price (0-1).
+  // author_price also gets set to this value for P&L computation.
+  const buyPrice = toFiniteNumber(body.buy_price_usd ?? body.pm_yes_no_price);
   if (buyPrice != null && buyPrice > 0 && buyPrice <= 1) {
-    body.source_date_price = buyPrice;
-    body.publish_price = buyPrice;
-    if (body.market_implied_prob === undefined) {
-      const isNo = body.direction === "short";
-      body.market_implied_prob = isNo ? 1 - buyPrice : buyPrice;
-    }
+    body.pm_yes_no_price = buyPrice;
+    body.author_price = buyPrice;
   }
   // Warn if PM price looks like a stock price (should be 0-1 probability)
-  const pubPrice = toFiniteNumber(body.publish_price);
+  const pubPrice = toFiniteNumber(body.author_price);
   if (pubPrice != null && pubPrice > 1) {
-    console.error(`[post] PM trade has stock-scale publish_price: ${pubPrice} — expected 0-1 range`);
+    console.error(`[post] PM trade has stock-scale author_price: ${pubPrice} — expected 0-1 range`);
   }
 } else {
   await enrichBaselineViaAssess(body as Record<string, unknown>, baseUrl, apiKey);
 }
 
-applyCanonicalPublishPrice(body as Record<string, unknown>);
 payload = JSON.stringify(body);
 
 // Resolve author avatar locally (fxtwitter works from user machines, not CF Workers).
-// If the payload already has author_avatar_url, skip. Otherwise try to fetch it
-// for X-platform authors so the backend doesn't need to rely on its blocked resolvers.
+// If the payload already has author_avatar_url, skip. Otherwise try to fetch it.
+// Always attempt for handles that look like X usernames (no spaces, ≤15 chars) regardless
+// of which platform the trade routes to — the trade venue (hyperliquid/robinhood) is NOT
+// the author's platform.
 if (typeof body.author_handle === "string" && body.author_handle.trim() && !body.author_avatar_url) {
-  const authorPlatform = typeof body.platform === "string" ? body.platform : "";
-  const sourcePlatform = typeof body.source_platform === "string" ? body.source_platform : "";
-  // Only resolve for X/Twitter authors — other platforms resolve fine from Workers
-  if (authorPlatform === "x" || authorPlatform === "twitter" || sourcePlatform === "x" || sourcePlatform === "twitter") {
+  const handle = body.author_handle.replace(/^@/, "").trim();
+  const looksLikeXHandle = handle.length <= 15 && /^[A-Za-z0-9_]+$/.test(handle);
+  if (looksLikeXHandle) {
     try {
-      const handle = body.author_handle.replace(/^@/, "");
       const res = await fetch(`https://api.fxtwitter.com/${handle}`, {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(8000),
       });
       if (res.ok) {
         const data = await res.json() as { user?: { avatar_url?: string } };
@@ -580,7 +557,7 @@ try {
     }, { runId });
 
     if (body.source_theses && Array.isArray(body.source_theses)) {
-      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run scripts/finalize-source.ts ...");
+      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run skill/scripts/finalize-source.ts ...");
     }
   }
 } catch { /* streaming is optional */ }

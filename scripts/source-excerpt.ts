@@ -11,8 +11,8 @@
  *   --around "exact quote"  Returns ~500 words surrounding an exact quote match
  *
  * Usage:
- *   bun run scripts/source-excerpt.ts --file <saved_to> --query "compute NVIDIA OpenAI"
- *   bun run scripts/source-excerpt.ts --file <saved_to> --around "who has the most compute"
+ *   bun run skill/scripts/source-excerpt.ts --file <saved_to> --query "compute NVIDIA OpenAI"
+ *   bun run skill/scripts/source-excerpt.ts --file <saved_to> --around "who has the most compute"
  */
 
 import { readFileSync } from "fs";
@@ -48,7 +48,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   }
 
   if (!file || !mode || !text) {
-    console.error("Usage: bun run scripts/source-excerpt.ts --file <path> <--query \"keywords\" | --around \"exact quote\">");
+    console.error("Usage: bun run skill/scripts/source-excerpt.ts --file <path> <--query \"keywords\" | --around \"exact quote\">");
     console.error("Options:");
     console.error("  --max N        Max passages to return (default: 5)");
     console.error("  --window N     Words per passage window (default: 150)");

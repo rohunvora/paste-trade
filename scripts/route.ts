@@ -40,9 +40,8 @@ interface TickerAssessment {
   direction: Direction;
   capital: number;
   current_price: number;
-  source_date_price?: number;
+  author_price?: number;
   source_date?: string;
-  since_published_move_pct?: number;
   earnings?: { date: string; days_away: number };
   trailing_perf?: Record<string, number>;
   company_name?: string;
@@ -90,7 +89,7 @@ function parseArgs(argv: string[]) {
   }
 
   if (filteredArgs.length < 2) {
-    console.error("Usage: bun run scripts/route.ts [--run-id <runId>] <TICKER[,TICKER]> <long|short> [options]");
+    console.error("Usage: bun run skill/scripts/route.ts [--run-id <runId>] <TICKER[,TICKER]> <long|short> [options]");
     console.error("Options:");
     console.error("  --source-date YYYY-MM-DD   Price at source date for since-published P&L");
     console.error("  --capital NUMBER           Capital (default: 100000)");
@@ -235,7 +234,7 @@ interface RouteAlternative {
   platform: "hyperliquid" | "robinhood" | "polymarket";
   instrument: "perps" | "shares" | "polymarket";
   routed_ticker: string;
-  publish_price: number | null;
+  author_price: number | null;
 }
 
 interface RouteSummary {
@@ -246,7 +245,7 @@ interface RouteSummary {
     platform: "hyperliquid" | "robinhood" | "polymarket" | null;
     instrument: "perps" | "shares" | "polymarket" | null;
     routed_ticker: string | null;
-    publish_price: number | null;
+    author_price: number | null;
   } & RoutingMetadata;
   alternatives: RouteAlternative[];
   prediction_markets?: {
@@ -255,17 +254,16 @@ interface RouteSummary {
       market_question: string;
       market_slug: string;
       condition_id: string | null;
-      buy_price_usd: number;
+      buy_price_usd: number;  // raw from assess API (mapped to pm_yes_no_price in output)
       no_price: number;
-      volume_usd: number;
+      volume_usd: number;    // raw from assess API (not stored on trades)
       end_date: string | null;
     }>;
   };
   price_context: {
     current_price: number;
     source_date: string | null;
-    source_date_price: number | null;
-    since_published_move_pct: number | null;
+    author_price: number | null;
   };
   candidate_routes: CandidateRoute[];
   note: string | null;
@@ -276,27 +274,27 @@ function buildSummary(item: TickerAssessment): RouteSummary {
   const shares = toShareInstrument(item.instruments?.shares);
   const perpsAvailable = perps?.available === true;
   const sharesAvailable = shares?.available === true;
-  const canonicalPublishPrice = toFiniteNumber(item.source_date_price) ?? toFiniteNumber(item.current_price);
+  const canonicalAuthorPrice = toFiniteNumber(item.author_price) ?? toFiniteNumber(item.current_price);
 
   let selected: RouteSummary["selected_expression"] = {
     platform: null,
     instrument: null,
     routed_ticker: null,
-    publish_price: null,
+    author_price: null,
     ...EMPTY_ROUTING_METADATA,
   };
   const alternatives: RouteAlternative[] = [];
 
   if (perpsAvailable) {
     const routedTicker = typeof perps?.hl_ticker === "string" && perps.hl_ticker.trim() ? perps.hl_ticker.trim() : item.ticker;
-    // For alias matches (GLD→GOLD), the perp publish_price is in perp units ($5,094)
-    // while item.source_date_price is in ETF units ($468). Prefer the perp's own price.
-    const perpPublishPrice = toFiniteNumber(perps?.publish_price);
+    // For alias matches (GLD→GOLD), the perp author_price is in perp units ($5,094)
+    // while item.author_price is in ETF units ($468). Prefer the perp's own price.
+    const perpAuthorPrice = toFiniteNumber(perps?.author_price);
     selected = {
       platform: "hyperliquid",
       instrument: "perps",
       routed_ticker: routedTicker,
-      publish_price: perpPublishPrice ?? toFiniteNumber(item.source_date_price) ?? canonicalPublishPrice,
+      author_price: perpAuthorPrice ?? toFiniteNumber(item.author_price) ?? canonicalAuthorPrice,
       ...extractPerpMetadata(perps, routedTicker),
     };
   } else if (sharesAvailable) {
@@ -304,7 +302,7 @@ function buildSummary(item: TickerAssessment): RouteSummary {
       platform: "robinhood",
       instrument: "shares",
       routed_ticker: item.ticker,
-      publish_price: toFiniteNumber(item.source_date_price) ?? toFiniteNumber(shares?.publish_price) ?? canonicalPublishPrice,
+      author_price: toFiniteNumber(item.author_price) ?? toFiniteNumber(shares?.author_price) ?? canonicalAuthorPrice,
       ...EMPTY_ROUTING_METADATA,
     };
   }
@@ -314,7 +312,7 @@ function buildSummary(item: TickerAssessment): RouteSummary {
       platform: "hyperliquid",
       instrument: "perps",
       routed_ticker: typeof perps?.hl_ticker === "string" && perps.hl_ticker.trim() ? perps.hl_ticker.trim() : item.ticker,
-      publish_price: toFiniteNumber(item.source_date_price) ?? toFiniteNumber(perps?.publish_price) ?? canonicalPublishPrice,
+      author_price: toFiniteNumber(item.author_price) ?? toFiniteNumber(perps?.author_price) ?? canonicalAuthorPrice,
     });
   }
 
@@ -323,7 +321,7 @@ function buildSummary(item: TickerAssessment): RouteSummary {
       platform: "robinhood",
       instrument: "shares",
       routed_ticker: item.ticker,
-      publish_price: toFiniteNumber(item.source_date_price) ?? toFiniteNumber(shares?.publish_price) ?? canonicalPublishPrice,
+      author_price: toFiniteNumber(item.author_price) ?? toFiniteNumber(shares?.author_price) ?? canonicalAuthorPrice,
     });
   }
 
@@ -339,7 +337,7 @@ function buildSummary(item: TickerAssessment): RouteSummary {
         market_question: m.question,
         market_slug: m.slug,
         condition_id: m.condition_id ?? null,
-        buy_price_usd: m.outcome_prices?.yes ?? 0,
+        pm_yes_no_price: m.outcome_prices?.yes ?? 0,
         no_price: m.outcome_prices?.no ?? 0,
         volume_usd: m.volume_usd ?? 0,
         end_date: m.end_date ?? null,
@@ -360,8 +358,7 @@ function buildSummary(item: TickerAssessment): RouteSummary {
     price_context: {
       current_price: item.current_price,
       source_date: typeof item.source_date === "string" ? item.source_date : null,
-      source_date_price: toFiniteNumber(item.source_date_price),
-      since_published_move_pct: toFiniteNumber(item.since_published_move_pct),
+      author_price: toFiniteNumber(item.author_price),
     },
     candidate_routes: toCandidateRoutes(perps),
     note,

@@ -102,18 +102,18 @@ When routing to Polymarket, the trade needs specific fields:
 - `ticker`: the market slug from discover.ts output (e.g., "us-recession-by-end-of-2026"). Never invent a slug — use exactly what discover.ts returned.
 - `platform`: "polymarket"
 - `instrument`: "polymarket" (this is `trades.instrument`, not `tickers.instrument_type`)
-- `publish_price`: set to `buy_price_usd` (the 0-1 contract price)
-- `direction`: "long" means buying YES, thesis believes event WILL happen
+- `author_price`: set to the contract price (0-1)
+- `direction`: "long" means buying YES, "short" means buying NO
+- `pm_side`: "yes" or "no" — captured automatically by post.ts from direction before normalization
 
 **Stored in `trade_data` JSON:**
-- `buy_price_usd`: the YES contract price (0-1 range) — this IS the publish_price
-- `market_implied_prob`: same value as `buy_price_usd` for binary markets (the price IS the implied probability). Store both — display surfaces read `market_implied_prob` as the semantic probability field.
+- `pm_yes_no_price`: the contract price (0-1 range)
+- `pm_side`: "yes" or "no" — which contract was bought
 - `market_slug`: for deeplinks back to Polymarket
 - `condition_id`: **required** — the contract identifier from discover.ts results. Without this, the trade cannot price. Copy verbatim from discover.ts output.
 - `market_question`: the full market question text
 - `end_date`: resolution date
-- `volume_usd`: market volume
 
 Do NOT call `enrichBaselineViaAssess` for PM trades — it calls `/api/skill/assess`
 which internally uses Yahoo Finance and will corrupt the PM contract price.
-The `buy_price_usd` from the PM market IS the canonical price.
+The contract price from the PM market IS the canonical `author_price`.

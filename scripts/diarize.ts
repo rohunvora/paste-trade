@@ -9,7 +9,7 @@
  *   upload and diarize all chunks in parallel, merge results.
  *
  * Usage:
- *   bun run scripts/diarize.ts "https://youtube.com/watch?v=xxx"
+ *   bun run skill/scripts/diarize.ts "https://youtube.com/watch?v=xxx"
  *
  * Requires: GEMINI_API_KEY env var, yt-dlp, ffmpeg
  * Cost: ~$0.14/hour (Flash), ~$0.26/hour (Pro)
@@ -532,7 +532,7 @@ async function main() {
 
   const url = args[0];
   if (!url) {
-    console.error("Usage: bun run scripts/diarize.ts [--run-id <runId>] <url>");
+    console.error("Usage: bun run skill/scripts/diarize.ts [--run-id <runId>] <url>");
     process.exit(1);
   }
 

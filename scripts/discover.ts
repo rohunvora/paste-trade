@@ -6,9 +6,9 @@
  * across all supported venues (Hyperliquid, Polymarket).
  *
  * Usage:
- *   bun run scripts/discover.ts --catalog                     # HL non-crypto catalog
- *   bun run scripts/discover.ts --query "defense spending"    # search all venues
- *   bun run scripts/discover.ts --query "lakers" --platform polymarket
+ *   bun run skill/scripts/discover.ts --catalog                     # HL non-crypto catalog
+ *   bun run skill/scripts/discover.ts --query "defense spending"    # search all venues
+ *   bun run skill/scripts/discover.ts --query "lakers" --platform polymarket
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
@@ -61,7 +61,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   }
 
   if (!mode) {
-    console.error("Usage: bun run scripts/discover.ts [--run-id <runId>] <--catalog | --query \"keywords\">");
+    console.error("Usage: bun run skill/scripts/discover.ts [--run-id <runId>] <--catalog | --query \"keywords\">");
     console.error("Options:");
     console.error("  --catalog                    List all non-crypto HL instruments by asset class");
     console.error('  --query "keywords"           Search instruments across venues');

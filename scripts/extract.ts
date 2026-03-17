@@ -8,9 +8,9 @@
  * Other URLs: markdown.new → raw fetch + HTML strip.
  *
  * Usage:
- *   bun run scripts/extract.ts "https://youtube.com/watch?v=xxx"
- *   bun run scripts/extract.ts "https://x.com/user/status/123"
- *   bun run scripts/extract.ts "https://example.com/article"
+ *   bun run skill/scripts/extract.ts "https://youtube.com/watch?v=xxx"
+ *   bun run skill/scripts/extract.ts "https://x.com/user/status/123"
+ *   bun run skill/scripts/extract.ts "https://example.com/article"
  *
  * Requires: yt-dlp (brew install yt-dlp) for YouTube
  * Optional: X_BEARER_TOKEN env var for X API (better rate limits, higher reliability)
@@ -1252,7 +1252,7 @@ async function main() {
   const url = process.argv[2];
   if (!url) {
     console.error(
-      "Usage: bun run scripts/extract.ts <url>"
+      "Usage: bun run skill/scripts/extract.ts <url>"
     );
     process.exit(1);
   }

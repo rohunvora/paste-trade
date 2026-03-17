@@ -15,7 +15,7 @@ The author did the thinking. Your job: verify, price, and narrate.
 - If not multi-speaker: read transcript from `saved_to`.
 
 ```bash
-bun run scripts/diarize.ts --run-id <run_id> "URL"
+bun run skill/scripts/diarize.ts --run-id <run_id> "URL"
 # Speaker labels + timestamps. Costs ~$0.14/hr. Writes to its own saved_to.
 # Long-running: use 5 min timeout for videos up to 50 min.
 ```
@@ -23,7 +23,7 @@ bun run scripts/diarize.ts --run-id <run_id> "URL"
 After diarization completes, stream the result:
 
 ```bash
-bun run scripts/stream-thought.ts --run-id <run_id> "Diarized N speakers: Name, Name, Name"
+bun run skill/scripts/stream-thought.ts --run-id <run_id> "Diarized N speakers: Name, Name, Name"
 ```
 
 After reading content, if named speakers identified: web search for each speaker's X handle.
@@ -31,7 +31,7 @@ Use resolved handles as `author_handle` on per-trade posts.
 Source-level author stays as channel (source = publisher, trade = quote author).
 
 ```bash
-bun run scripts/stream-thought.ts --run-id <run_id> "Speakers: Name (@handle), Name (@handle)"
+bun run skill/scripts/stream-thought.ts --run-id <run_id> "Speakers: Name (@handle), Name (@handle)"
 ```
 
 **Transcript selection:**
@@ -42,7 +42,7 @@ bun run scripts/stream-thought.ts --run-id <run_id> "Speakers: Name (@handle), N
 - Upload full text once per run:
 
 ```bash
-bun run scripts/upload-source-text.ts <source_id> --file <saved_to> --provider transcript
+bun run skill/scripts/upload-source-text.ts <source_id> --file <saved_to> --provider transcript
 ```
 
 ## d-2 Extract
@@ -66,20 +66,20 @@ called out, or contrarian positions they argued against.
 **Stream your first-pass analysis** before saving. This is what the user reads while research runs:
 
 ```bash
-bun run scripts/stream-thought.ts --run-id <run_id> "<your first-pass breakdown — the beliefs you found, the framework, what's interesting>"
+bun run skill/scripts/stream-thought.ts --run-id <run_id> "<your first-pass breakdown — the beliefs you found, the framework, what's interesting>"
 ```
 
 **Save all theses in one batch:**
 
 ```bash
-echo '[{...}, {...}]' | bun run scripts/batch-save.ts --run-id <run_id> --total N
+echo '[{...}, {...}]' | bun run skill/scripts/batch-save.ts --run-id <run_id> --total N
 # Track every returned thesis ID.
 ```
 
 **Thesis map** (narrate to the live page):
 
 ```bash
-bun run scripts/stream-thought.ts --run-id <run_id> "Found N theses: oil supply risk, gold safe haven, ..."
+bun run skill/scripts/stream-thought.ts --run-id <run_id> "Found N theses: oil supply risk, gold safe haven, ..."
 ```
 
 **Long transcripts**: if word_count > 8,000 or transcript chars > 45,000, split extraction by chunk. Workers extract only; main thread merges/dedupes, then handles all save/update/post/finalize. Below threshold: extract sequentially.
@@ -100,8 +100,7 @@ Target output per thesis. This is what each routed thesis looks like when comple
         "ticker_tested": "SMR",
         "executable": true,
         "shares_available": true,
-        "publish_price": 12.54,
-        "source_date_price": 12.525
+        "author_price": 12.54
       }
     ],
     "selected_expression": {
@@ -110,9 +109,7 @@ Target output per thesis. This is what each routed thesis looks like when comple
       "instrument": "shares",
       "platform": "robinhood",
       "trade_type": "direct",
-      "publish_price": 12.54,
-      "source_date_price": 12.525,
-      "since_published_move_pct": 0.12
+      "author_price": 12.54
     }
   },
   "derivation": { "explanation": "...", "segments": [...], "steps": [...] }
@@ -148,12 +145,12 @@ SAVED THESIS (speaker: "quote")
 Per thesis, stream what you're researching:
 
 ```bash
-bun run scripts/stream-thought.ts --run-id <run_id> "Researching: [thesis text or headline_quote]"
+bun run skill/scripts/stream-thought.ts --run-id <run_id> "Researching: [thesis text or headline_quote]"
 ```
 
 Run all three in parallel for each thesis:
 
-1. **Instrument discovery** (`scripts/discover.ts --run-id <run_id> --thesis-id <thesis_id> --query "<keywords>"`):
+1. **Instrument discovery** (`skill/scripts/discover.ts --run-id <run_id> --thesis-id <thesis_id> --query "<keywords>"`):
    search available instruments across all venues (Hyperliquid + Polymarket) using
    terms from `who`. Works best with single concrete terms, not multi-word abstractions.
    Use `--catalog` for a full listing of non-crypto HL instruments.
@@ -162,7 +159,7 @@ Run all three in parallel for each thesis:
    the thesis is really about.
    If discover returns irrelevant results, ignore them.
 
-2. **Source context** (`scripts/source-excerpt.ts --run-id <run_id> --thesis-id <thesis_id> --file <saved_to> --query "<thesis keywords>"`):
+2. **Source context** (`skill/scripts/source-excerpt.ts --run-id <run_id> --thesis-id <thesis_id> --file <saved_to> --query "<thesis keywords>"`):
    retrieve surrounding context from the original source for this thesis.
    After extraction splits a source into theses, adjacent details get lost.
    Use this to find what the author said around each claim: qualifications,
@@ -179,10 +176,10 @@ Run all three in parallel for each thesis:
 
 - **ETFs and broad-sector stocks**: Hyperliquid often has a thematic index or
   commodity perp tracking the same underlying with leverage and no ETF overhead.
-  Run `discover.ts --query "<theme>"` to check. See `references/hl-universe.md`.
+  Run `discover.ts --query "<theme>"` to check. See `skill/references/hl-universe.md`.
 - **Event-driven theses**: Polymarket may have a binary contract that directly
   prices the catalyst. Run `discover.ts --query "<event keywords>"` to check.
-  See `references/prediction-markets.md`.
+  See `skill/references/prediction-markets.md`.
 - If a better venue exists, route there and present the original as an alternative.
 
 ### d-5 Evaluate + select
@@ -190,7 +187,7 @@ Run all three in parallel for each thesis:
 After selecting the expression, stream the routing decision:
 
 ```bash
-bun run scripts/stream-thought.ts --run-id <run_id> "Routing [headline_quote snippet] → TICKER direction"
+bun run skill/scripts/stream-thought.ts --run-id <run_id> "Routing [headline_quote snippet] → TICKER direction"
 ```
 
 For each candidate: is there a clear reasoning chain from the speaker's belief to this trade? Is there a better trade? If gaps, loop back to d-4 Research. Then pick 1-2 per thesis. No redundant routes.
@@ -224,12 +221,12 @@ The trade ideas in `who` are starting context, not decisions. Routing may confir
 ### d-6 Route + price
 
 ```bash
-bun run scripts/route.ts --run-id <run_id> --thesis-id <id> TICKER direction \
+bun run skill/scripts/route.ts --run-id <run_id> --thesis-id <id> TICKER direction \
   --source-date "<source_date>" --horizon "timing"
 # Returns: { tool: "route", route: { ticker, direction, executable, selected_expression,
 #   alternatives, price_context, candidate_routes, note }, diagnostics }
 # selected_expression and candidate_routes include HIP-3 routing metadata (see routing.md).
-# price_context: { current_price, source_date, source_date_price, since_published_move_pct }
+# price_context: { current_price, source_date, author_price }
 # If perps route selected and routed_ticker is provided, post that routed_ticker as ticker.
 ```
 
@@ -289,7 +286,7 @@ Before calling `save.ts --update`, verify:
 These fields cross-reference each other. `save.ts` validates consistency. Include updated `who`, `route_evidence`, and `derivation` in the same `--update` call.
 
 ```bash
-echo '<JSON with who + route_evidence + derivation>' | bun run scripts/save.ts --run-id <run_id> --update <id>
+echo '<JSON with who + route_evidence + derivation>' | bun run skill/scripts/save.ts --run-id <run_id> --update <id>
 ```
 
 Emits `thesis_routed` (or `thesis_dropped`) events automatically, updating the live source page with derivation data as each thesis resolves.

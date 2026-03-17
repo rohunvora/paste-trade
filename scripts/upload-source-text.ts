@@ -2,8 +2,8 @@
  * Upload canonical full source text for a source.
  *
  * Usage:
- *   bun run scripts/upload-source-text.ts <source_id> --file <path> [--provider transcript]
- *   bun run scripts/upload-source-text.ts <source_id> '{"raw_text":"...","provider":"transcript"}'
+ *   bun run skill/scripts/upload-source-text.ts <source_id> --file <path> [--provider transcript]
+ *   bun run skill/scripts/upload-source-text.ts <source_id> '{"raw_text":"...","provider":"transcript"}'
  */
 
 import { readFileSync } from "fs";
@@ -12,7 +12,7 @@ import { getAuthedBase, logHttp, readJsonInput, readResponseOrExit } from "./com
 const args = process.argv.slice(2);
 const sourceId = (args[0] ?? "").trim();
 if (!sourceId) {
-  console.error("Usage: bun run scripts/upload-source-text.ts <source_id> (--file <path> | '<JSON payload>')");
+  console.error("Usage: bun run skill/scripts/upload-source-text.ts <source_id> (--file <path> | '<JSON payload>')");
   process.exit(1);
 }
 

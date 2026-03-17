@@ -298,8 +298,7 @@ Supported venues:
         "ticker_tested": "SMR",
         "executable": true,
         "shares_available": true,
-        "publish_price": 12.54,
-        "source_date_price": 12.525
+        "author_price": 12.54
       }
     ],
     "selected_expression": {
@@ -308,9 +307,7 @@ Supported venues:
       "instrument": "shares",
       "platform": "robinhood",
       "trade_type": "direct",
-      "publish_price": 12.54,
-      "source_date_price": 12.525,
-      "since_published_move_pct": 0.12
+      "author_price": 12.54
     }
   }
 }
@@ -385,7 +382,7 @@ available.
 bun run scripts/route.ts --run-id <run_id> --thesis-id <id> TICKER direction --source-date "ISO-8601-datetime-or-YYYY-MM-DD" --horizon "timing"
 # Returns: { tool: "route", route: { ticker, direction, executable, selected_expression, alternatives, price_context, candidate_routes, note }, diagnostics }
 # selected_expression and candidate_routes include HIP-3 routing metadata (see routing.md).
-# price_context: { current_price, source_date, source_date_price, since_published_move_pct }
+# price_context: { current_price, source_date, author_price }
 # If perps route selected and routed_ticker is provided, post that routed_ticker as ticker.
 ```
 
@@ -411,8 +408,8 @@ echo '<JSON payload>' | bun run scripts/post.ts --run-id <run_id>
 
 - `headline_quote` must be an exact string match to one of saved `quotes[]`.
 - Posted `ticker`, `direction`, `instrument`, `platform`, and `trade_type` must match `route_evidence.selected_expression`.
-- Carry `source_date_price` and `since_published_move_pct` from route `price_context` whenever present.
-- `post.ts` will attempt baseline backfill via `/api/skill/assess` if those fields are missing, but treat that as fallback not primary path.
+- Carry `author_price` from route `price_context` whenever present.
+- `post.ts` will attempt baseline enrichment via `/api/skill/assess` if `author_price` is missing, but treat that as fallback not primary path.
 
 After all trade POSTs succeed, finalize the source explicitly:
 
@@ -441,16 +438,14 @@ Do not rely on a trade POST to resolve the live source page.
 |-------|-------|
 | `ticker` | Use `routed_ticker` value from route output. Post as `ticker`, not as `routed_ticker` |
 | `direction` | `"long"` or `"short"` |
-| `publish_price` | Stocks/perps: `source_date_price` from route price context |
-| `source_date_price` | Required for baseline P&L. Use route `price_context.source_date_price` |
-| `since_published_move_pct` | Required when available. Use route `price_context.since_published_move_pct` |
+| `author_price` | Price at author's publish date. Use route `price_context.author_price` |
 | `thesis` | Thesis text |
 | `headline_quote` | Must exactly match one saved `quotes[]` value and be <=120 chars |
 | `ticker_context` | 1-3 sentences that explain the instrument to someone who doesn't know what it is. No jargon. |
 | `author_handle` | Speaker/author whose quote anchors this trade; user thesis -> current authenticated user handle |
 | `author_platform` | `"youtube"`, `"x"`, `"substack"`, `"podcast"`, `"pdf"`, `"direct"`, etc. |
 | `source_url` | string or null |
-| `source_date` | ISO 8601 |
+| `author_date` | ISO 8601 — when the author said it |
 | `trade_type` | `"direct"` or `"derived"` |
 | `instrument` | `"shares"` or `"perps"` |
 | `platform` | `"robinhood"` or `"hyperliquid"` |
@@ -469,15 +464,18 @@ Finalization-only fields:
 
 Useful optional `trade_data` fields:
 
-- `since_published_pnl_dollars`
 - `horizon`
-- `kills`
 - `alt_venues`
 - `avatar_url`
 
+For Polymarket trades, also include:
+
+- `pm_side`: `"yes"` or `"no"` — which contract was bought
+- `pm_yes_no_price`: 0-1 contract price
+
 ### Notes
 
-- Card price is the underlying asset price at `source_date`
+- Card price is the underlying asset price at `author_date`
 - API warnings are real feedback; notice them and fix obvious quality problems before moving on
 - Keep `run_id` explicit throughout the run. Do not rely on implicit context lookup.
 
