@@ -13,7 +13,7 @@ If this file conflicts with `SKILL.md`, follow `SKILL.md`.
 3. For URL inputs: run `scripts/extract.ts`, then `scripts/create-source.ts` before long follow-up steps.
 4. Reuse one `run_id` across adapter calls in a run.
 5. Finalization must include every saved thesis exactly once (no drops, no duplicates).
-6. Do not require X auth for first run; fallbacks must remain available.
+6. First run must work without any login — identity is auto-provisioned via API key.
 
 ## Scope
 

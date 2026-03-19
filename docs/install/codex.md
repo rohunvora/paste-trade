@@ -20,7 +20,7 @@ https://github.com/rohunvora/paste-trade-skill
 /trade US power demand from AI workloads will outperform grid expectations.
 ```
 
-X login is optional and should not block first run.
+No login required — the skill auto-provisions your identity on first run.
 
 ## Update
 
@@ -30,7 +30,4 @@ Paste the repo URL into your agent again:
 https://github.com/rohunvora/paste-trade-skill
 ```
 
-## Account portability
-
-- Preferred: reuse one `PASTE_TRADE_KEY` across clients.
-- To sign in to the web: run `bun run scripts/signin.ts` — opens a one-time link in your browser.
+See [Account portability](../../README.md#account-portability) for multi-client key sharing and web sign-in.

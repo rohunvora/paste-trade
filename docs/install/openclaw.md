@@ -54,7 +54,7 @@ Expected chat flow:
 - a progress link as soon as that run's source page is ready
 - one compact final summary when routing and posting finish, even for queued runs
 
-X login is optional and should not block first run.
+No login required — the skill auto-provisions your identity on first run.
 
 ## Update
 
@@ -70,7 +70,4 @@ Then rerun wrapper setup:
 bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
 ```
 
-## Account portability
-
-- Preferred: reuse one `PASTE_TRADE_KEY` across clients.
-- To sign in to the web: run `bun run scripts/signin.ts` — opens a one-time link in your browser.
+See [Account portability](../../README.md#account-portability) for multi-client key sharing and web sign-in.

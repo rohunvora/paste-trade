@@ -5,6 +5,20 @@ Versioning note:
 - the March 5 rewrite was previously tracked internally as `2.0.0`
 - install commands use the bare repo path (no version tag)
 
+## [1.2.8] - 2026-03-19
+
+Replace X OAuth with session-link sign-in.
+
+### Changed
+
+- `scripts/signin.ts` replaces `scripts/connect.ts` — generates a one-time browser link from the CLI instead of routing through X OAuth
+- Install docs no longer reference X login (removed from all three client guides and AGENTS.md)
+- Account portability section consolidated in README; install docs link to it instead of duplicating
+
+### Removed
+
+- `scripts/connect.ts` — OAuth connect/merge flow (X OAuth removed from backend)
+
 ## [1.2.7] - 2026-03-17
 
 Polymarket held-side pricing sync.
