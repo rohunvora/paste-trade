@@ -352,7 +352,7 @@ Write an `explanation` for every routed trade. Lead with the sharp insight and
 explain the reasoning in 1-2 sentences. This is the short summary near the
 quote; steps are the full chain.
 
-Prefer exactly 3 steps. Each step must advance the chain, no filler. Max 70 chars per step — write like a headline, not a sentence. Cut dates, parentheticals, and asides.
+Prefer exactly 3 steps. Each step must advance the chain, no filler. Max 70 chars per step — write like a headline, not a sentence. Cut dates, parentheticals, and asides. No em dashes. No jargon.
 
 Steps should earn the conclusion, not summarize it. If the author named the
 ticker, the chain can be short. If routing required a leap, earn it. When a
