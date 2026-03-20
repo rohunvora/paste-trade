@@ -35,6 +35,10 @@ If the input is exactly "update": pull the latest version of the skill repo, sho
 3. Run `git -C <repo_root> log --oneline -5` to show recent changes.
 4. Tell the user what updated (SKILL.md, scripts, references, etc.) and stop. Do not continue to the trade pipeline.
 
+### add to source
+
+If the input contains a paste.trade/s/ URL plus a thesis or trade idea: load `references/add-to-source.md` and follow that flow. Do not run the normal extraction pipeline.
+
 ## 1 - Defaults
 
 - $100K risk capital, max upside
