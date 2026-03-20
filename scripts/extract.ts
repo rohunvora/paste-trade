@@ -22,6 +22,7 @@ import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { getRuntimeSourceDir, readEnvValue } from "./runtime-paths";
+import { parseSafeExternalUrl } from "./security";
 
 // ---------------------------------------------------------------------------
 // X API tokens (optional)
@@ -256,6 +257,14 @@ function extractVideoId(url: string): string | null {
   return m?.[1] ?? null;
 }
 
+function sanitizeCliUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.startsWith("-")) {
+    throw new Error("Invalid URL for command execution.");
+  }
+  return trimmed;
+}
+
 // ---------------------------------------------------------------------------
 // YouTube transcript via yt-dlp
 // ---------------------------------------------------------------------------
@@ -288,9 +297,10 @@ interface YoutubeMeta {
 
 /** Fetch YouTube video metadata via yt-dlp --dump-json */
 async function fetchYoutubeMeta(url: string): Promise<YoutubeMeta> {
+  const safeUrl = sanitizeCliUrl(url);
   const empty: YoutubeMeta = { publishedAt: null, title: null, channel: null, channelHandle: null, channelUrl: null, description: null, durationSeconds: null };
   try {
-    const result = await $`yt-dlp --dump-json --skip-download ${url}`.quiet().nothrow();
+    const result = await $`yt-dlp --dump-json --skip-download -- ${safeUrl}`.quiet().nothrow();
     if (result.exitCode !== 0) return empty;
     const meta = JSON.parse(result.stdout.toString());
 
@@ -333,6 +343,7 @@ async function streamStatus(message: string): Promise<void> {
 }
 
 async function extractYoutube(url: string): Promise<string> {
+  const safeUrl = sanitizeCliUrl(url);
   const videoId = extractVideoId(url);
   if (!videoId) throw new Error("Could not extract video ID from URL");
 
@@ -353,7 +364,7 @@ async function extractYoutube(url: string): Promise<string> {
   const capFile = join(tmpdir(), `yt-transcript-${videoId}-${videoId}.en.json3`);
 
   // Step 2: attempt caption download — quiet captures stderr for diagnosis
-  const result = await $`yt-dlp --write-auto-sub --write-sub --skip-download --sub-lang en --sub-format json3 -o ${outTemplate} ${url}`
+  const result = await $`yt-dlp --write-auto-sub --write-sub --skip-download --sub-lang en --sub-format json3 -o ${outTemplate} -- ${safeUrl}`
     .quiet()
     .nothrow();
 
@@ -413,7 +424,7 @@ async function extractYoutube(url: string): Promise<string> {
   }
 
   // Step 3: fetch metadata (parallel-safe, runs while we parse captions)
-  const metaPromise = fetchYoutubeMeta(url);
+  const metaPromise = fetchYoutubeMeta(safeUrl);
 
   // Step 4: parse the caption file
   const data = (await Bun.file(capFile).json()) as {
@@ -1189,8 +1200,10 @@ function extractArticleMetadataFromHtml(
 }
 
 async function fetchArticleMetadata(url: string): Promise<ArticleMetadata | null> {
+  const safeUrl = parseSafeExternalUrl(url)?.href;
+  if (!safeUrl) return null;
   try {
-    const res = await fetch(url, {
+    const res = await fetch(safeUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         Accept: "text/html,application/xhtml+xml,*/*",
@@ -1202,7 +1215,7 @@ async function fetchArticleMetadata(url: string): Promise<ArticleMetadata | null
     if (!body || body.length < 50) return null;
     const looksLikeHtml = /<html|<meta|<title|<script/i.test(body);
     if (!looksLikeHtml) return null;
-    return extractArticleMetadataFromHtml(body, url);
+    return extractArticleMetadataFromHtml(body, safeUrl);
   } catch {
     return null;
   }
@@ -1242,12 +1255,16 @@ function buildArticlePayload(
 // ---------------------------------------------------------------------------
 
 async function extractText(url: string): Promise<string> {
+  const safeUrl = parseSafeExternalUrl(url)?.href;
+  if (!safeUrl) {
+    return JSON.stringify({ source: "text", url, error: "Blocked unsafe or invalid URL." });
+  }
   streamStatus("Extracting article...");
-  const metadataPromise = fetchArticleMetadata(url);
+  const metadataPromise = fetchArticleMetadata(safeUrl);
 
   // Try markdown.new first (clean article extraction, handles JS-rendered pages)
   try {
-    const mdRes = await fetch(`https://markdown.new/${url}`, {
+    const mdRes = await fetch(`https://markdown.new/${encodeURIComponent(safeUrl)}`, {
       headers: { Accept: "text/markdown" },
     });
     if (mdRes.ok) {
@@ -1255,7 +1272,7 @@ async function extractText(url: string): Promise<string> {
       if (md.length > 100) {
         const images = extractImagesFromMarkdown(md);
         const metadata = await metadataPromise;
-        const payload = buildArticlePayload("markdown.new", url, md, images, metadata);
+        const payload = buildArticlePayload("markdown.new", safeUrl, md, images, metadata);
         const parsed = JSON.parse(payload) as { word_count?: number };
         console.error(`  markdown.new: ${parsed.word_count ?? 0} words, ${images.length} images extracted`);
         return payload;
@@ -1266,7 +1283,7 @@ async function extractText(url: string): Promise<string> {
   }
 
   // Fallback: raw fetch + regex strip
-  const res = await fetch(url, {
+  const res = await fetch(safeUrl, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
       Accept: "text/html,application/xhtml+xml",
@@ -1275,14 +1292,14 @@ async function extractText(url: string): Promise<string> {
   });
 
   if (!res.ok) {
-    return JSON.stringify({ source: "text", url, error: `HTTP ${res.status}` });
+    return JSON.stringify({ source: "text", url: safeUrl, error: `HTTP ${res.status}` });
   }
 
   const html = await res.text();
 
   // Extract images before stripping HTML
-  const images = extractImagesFromHtml(html, url);
-  const htmlMetadata = extractArticleMetadataFromHtml(html, url, undefined, images);
+  const images = extractImagesFromHtml(html, safeUrl);
+  const htmlMetadata = extractArticleMetadataFromHtml(html, safeUrl, undefined, images);
 
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -1293,7 +1310,7 @@ async function extractText(url: string): Promise<string> {
     .replace(/\s+/g, " ")
     .trim();
 
-  const payload = buildArticlePayload("text", url, text, images, htmlMetadata);
+  const payload = buildArticlePayload("text", safeUrl, text, images, htmlMetadata);
   const parsed = JSON.parse(payload) as { word_count?: number };
   console.error(`  raw fetch: ${parsed.word_count ?? 0} words, ${images.length} images extracted`);
   return payload;
@@ -1342,10 +1359,12 @@ async function main() {
           const img = parsed.images[i];
           const imgUrl = typeof img === "string" ? img : img?.url;
           if (!imgUrl) continue;
+          const safeImgUrl = parseSafeExternalUrl(imgUrl)?.href;
+          if (!safeImgUrl) continue;
           try {
-            const imgRes = await fetch(imgUrl);
+            const imgRes = await fetch(safeImgUrl);
             if (imgRes.ok) {
-              const ext = imgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
+              const ext = safeImgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
               const imgPath = join(dir, `source-${hash}-img${i}.${ext}`);
               await Bun.write(imgPath, await imgRes.arrayBuffer());
               imageFiles.push(imgPath);

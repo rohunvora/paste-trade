@@ -7,6 +7,8 @@
  */
 
 import { readFileSync } from "fs";
+import { getRuntimeSourceDir } from "./runtime-paths";
+import { ensurePathInsideDir } from "./security";
 import { getAuthedBase, logHttp, readJsonInput, readResponseOrExit } from "./common";
 
 const args = process.argv.slice(2);
@@ -27,7 +29,12 @@ if (fileIdx !== -1) {
     console.error("[upload-source-text] --file requires a path");
     process.exit(1);
   }
-  const rawText = readFileSync(filePath, "utf8");
+  const allowedPath = ensurePathInsideDir(filePath, getRuntimeSourceDir());
+  if (!allowedPath) {
+    console.error("[upload-source-text] --file must point to a file inside the runtime sources directory.");
+    process.exit(1);
+  }
+  const rawText = readFileSync(allowedPath, "utf8");
   payload = {
     raw_text: rawText,
     provider: provider || "transcript_file",

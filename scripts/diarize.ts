@@ -54,6 +54,14 @@ function extractVideoId(url: string): string | null {
   return match?.[1] ?? null;
 }
 
+function sanitizeCliUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.startsWith("-")) {
+    throw new Error("Invalid URL for command execution.");
+  }
+  return trimmed;
+}
+
 // ---------------------------------------------------------------------------
 // Timestamp math
 // ---------------------------------------------------------------------------
@@ -92,9 +100,10 @@ interface YoutubeMeta {
 
 /** Fetch YouTube video metadata via yt-dlp --dump-json */
 async function fetchYoutubeMeta(url: string): Promise<YoutubeMeta> {
+  const safeUrl = sanitizeCliUrl(url);
   const empty: YoutubeMeta = { publishedAt: null, title: null, channel: null, channelHandle: null, channelUrl: null };
   try {
-    const result = await $`yt-dlp --dump-json --skip-download ${url}`.quiet().nothrow();
+    const result = await $`yt-dlp --dump-json --skip-download -- ${safeUrl}`.quiet().nothrow();
     if (result.exitCode !== 0) return empty;
     const meta = JSON.parse(result.stdout.toString());
 
@@ -123,12 +132,13 @@ async function fetchYoutubeMeta(url: string): Promise<YoutubeMeta> {
 }
 
 async function downloadAudio(url: string): Promise<string> {
+  const safeUrl = sanitizeCliUrl(url);
   const videoId = extractVideoId(url) || "audio";
   const outPath = join(tmpdir(), `diarize-${videoId}.mp3`);
 
   const { streamLog } = await import("./stream-log");
   streamLog("Downloading audio...");
-  const result = await $`yt-dlp --extract-audio --audio-format mp3 --audio-quality 5 -o ${outPath} ${url}`
+  const result = await $`yt-dlp --extract-audio --audio-format mp3 --audio-quality 5 -o ${outPath} -- ${safeUrl}`
     .quiet()
     .nothrow();
 

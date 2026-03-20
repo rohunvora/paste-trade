@@ -54,6 +54,7 @@ const apiBody = JSON.stringify(parsedPayload);
 
 // Auto-provision API key if missing, resolve base URL
 import { ensureKey, getBaseUrl } from "./ensure-key";
+import { openUrlInBrowser } from "./security";
 const baseUrl = getBaseUrl();
 const apiKey = await ensureKey();
 if (!apiKey) {
@@ -120,8 +121,7 @@ try {
   }
 
   // Open the live page in the user's browser automatically
-  const { $ } = await import("bun");
-  await $`open ${result.source_url}`.quiet().nothrow();
+  await openUrlInBrowser(result.source_url, new URL(baseUrl).hostname);
 
   result.run_id = runId;
   console.log(JSON.stringify(result));

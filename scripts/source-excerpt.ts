@@ -18,6 +18,8 @@
 import { readFileSync } from "fs";
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { getStreamContext, pushEvent } from "./stream-context";
+import { getRuntimeSourceDir } from "./runtime-paths";
+import { ensurePathInsideDir } from "./security";
 
 // ── Args ──────────────────────────────────────────────────────────
 
@@ -61,7 +63,11 @@ function parseArgs(argv: string[]): ParsedArgs {
 // ── Source loading ────────────────────────────────────────────────
 
 function loadSourceText(filePath: string): string {
-  const raw = readFileSync(filePath, "utf8");
+  const allowedPath = ensurePathInsideDir(filePath, getRuntimeSourceDir());
+  if (!allowedPath) {
+    throw new Error("Source file path must be inside the runtime sources directory.");
+  }
+  const raw = readFileSync(allowedPath, "utf8");
   // Source files are JSON with a "transcript" or "text" field
   try {
     const parsed = JSON.parse(raw);
@@ -252,7 +258,13 @@ const { runId, args: rawArgs } = extractRunIdArg(process.argv);
 applyRunId(runId);
 
 const args = parseArgs(rawArgs);
-const sourceText = loadSourceText(args.file);
+let sourceText = "";
+try {
+  sourceText = loadSourceText(args.file);
+} catch (err: any) {
+  console.error(`[source-excerpt] ${err?.message ?? "Invalid source file path"}`);
+  process.exit(1);
+}
 
 if (!sourceText.trim()) {
   console.error("[source-excerpt] Source file is empty or unreadable");
