@@ -386,6 +386,12 @@ available.
 - video/podcast: every segment MUST include `timestamp` (MM:SS or H:MM:SS from diarized transcript) and `source_url` (the video URL). These power click-to-seek on the source page. Resolve speaker X handles when it materially helps attribution.
 - tweets: `timestamp` and `source_url` can be omitted (no timestamp concept for tweets)
 
+#### Card steps
+
+After writing derivation, rewrite each step into a `chain_steps_card` array on the trade body. These are the steps shown on the share card — a completely separate field from `derivation.steps`.
+
+Take each derivation step and compress it: strip citations, URLs, dates, parentheticals, ticker context. Keep only the core claim. Max 60 chars per step. Exactly 3 steps. No jargon. No em dashes. Write like a headline a friend can understand.
+
 ### 9 - Price
 
 #### Instrument preference
