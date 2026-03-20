@@ -110,3 +110,31 @@ The skill uses two main data shapes. Here's what each field means in plain Engli
 | `candidates` | Each ticker considered, with `case` (why it fits or doesn't) and `catalyst` (upcoming event + date) |
 | `segments` | Source quotes that anchor this trade, with speaker attribution |
 | `steps` | The reasoning chain from quote → thesis → instrument. Provenance metadata |
+
+---
+
+## Share card image API
+
+Every trade has a shareable PNG card. Fetch it directly:
+
+```
+GET https://paste.trade/api/og/share/{trade_id}
+```
+
+Returns a `image/png` (1200×630 by default). Options via query params:
+
+| Param | Values | Default |
+|-------|--------|---------|
+| `format` | `landscape` (1200×630), `square` (1080×1080) | `landscape` |
+| `mode` | `call` (P&L from author date), `post` (P&L from paste date) | `call` |
+| `leverage` | integer (e.g. `5`) | `1` |
+
+Examples:
+
+```
+https://paste.trade/api/og/share/97286e6c-a
+https://paste.trade/api/og/share/97286e6c-a?format=square
+https://paste.trade/api/og/share/97286e6c-a?leverage=5&mode=post
+```
+
+Cached for 5 minutes. Add any query param to bypass cache.
