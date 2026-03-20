@@ -8,7 +8,33 @@
  */
 
 import { loadKey, getBaseUrl } from "./ensure-key";
-import { execSync } from "child_process";
+import { spawn } from "child_process";
+
+function isSafeSigninUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function openSigninUrl(url: string): void {
+  if (process.platform === "darwin") {
+    const child = spawn("open", [url], { stdio: "ignore", detached: true });
+    child.unref();
+    return;
+  }
+
+  if (process.platform === "linux") {
+    const child = spawn("xdg-open", [url], { stdio: "ignore", detached: true });
+    child.unref();
+    return;
+  }
+
+  const child = spawn("cmd", ["/c", "start", "", url], { stdio: "ignore", detached: true });
+  child.unref();
+}
 
 export async function signIn(): Promise<string> {
   const apiKey = loadKey("PASTE_TRADE_KEY");
@@ -32,16 +58,13 @@ export async function signIn(): Promise<string> {
   }
 
   const result = await res.json() as { url: string; expires_in: number };
+  if (!isSafeSigninUrl(result.url)) {
+    return "Failed to create sign-in link: server returned an invalid URL.";
+  }
 
   // Open in browser
   try {
-    if (process.platform === "darwin") {
-      execSync(`open "${result.url}"`);
-    } else if (process.platform === "linux") {
-      execSync(`xdg-open "${result.url}"`);
-    } else {
-      execSync(`start "${result.url}"`);
-    }
+    openSigninUrl(result.url);
   } catch {
     // If open fails, the user can manually visit the URL
   }
