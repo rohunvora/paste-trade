@@ -1,128 +1,76 @@
-# paste-trade-skill
+# paste.trade/skill
 
-This is a skill for your AI agent. It adds the `/trade` command.
+Can an AI read what someone said about markets and turn it into a tracked, auditable trade?
 
-Finds every tradeable thesis in a source and routes each to an executable trade on [paste.trade](https://paste.trade). Works with tweets, podcasts, articles, screenshots, hunches, and market observations.
+This repo is the reasoning engine. [paste.trade](https://paste.trade) is where the results live.
 
-## Supported clients
+## The experiment
 
-- Claude Code
-- OpenClaw
-- Codex
+Someone says something about markets — a tweet, a podcast clip, an article, a hunch typed into a terminal. An AI agent reads it, extracts every tradeable thesis, researches instruments, picks the best expression for each, explains its reasoning, and locks the price.
+
+Then we wait. Live P&L tracks from that moment forward. Was the AI's interpretation right? Did it pick a better instrument than the author implied? You can check — every trade is public, every reasoning step is visible, every price is locked.
+
+We're running this experiment in public.
+
+## What happens when you paste a URL
+
+You paste a tweet. The agent reads it. Finds the tradeable ideas. Researches instruments — stocks, perps, prediction markets. Compares candidates side by side. Picks the best fit. Explains why.
+
+Locks two prices:
+- when the author said it
+- when the AI posted the trade
+
+You watch it resolve live on the source page. Then we track P&L from that moment forward. No backtesting. No hypotheticals. Just: was the AI right?
+
+## What this is not
+
+Not a trading bot. It doesn't execute. Not a black box. Every reasoning step is visible. Not financial advice. It's an experiment.
+
+It's an AI that shows its work and gets graded.
+
+## This repo vs paste.trade
+
+| this repo | paste.trade |
+|---|---|
+| the reasoning engine | the accountability layer |
+| reads sources | tracks P&L |
+| extracts theses | hosts source pages |
+| researches tickers | streams progress live |
+| explains reasoning | publishes share cards |
+| posts trades | ranks authors by results |
+| **runs in your agent** | **anyone can verify** |
 
 ## Install
 
-Claude Code and Codex only need the `trade` skill itself.
-
-OpenClaw needs one extra OpenClaw-only component: an async command bridge that
-acknowledges `/trade` immediately, queues same-chat requests in a private
-background worker lane, sends a progress link as soon as the source is
-created for that run, returns a compact final summary when it finishes, and
-keeps intermediate worker chatter out of your main chat. If you are not using
-OpenClaw, ignore that step completely.
-
-### Claude Code / Codex
-
-Paste the repo URL into your agent:
+Paste into Claude Code, Codex, or OpenClaw:
 
 ```
 https://github.com/rohunvora/paste-trade-skill
 ```
 
-### OpenClaw
-
-Paste the repo URL into your agent:
+Then:
 
 ```
-https://github.com/rohunvora/paste-trade-skill
+/trade https://x.com/someone/status/123456789
+/trade update
 ```
 
-Then run the wrapper setup from the installed skill directory:
+## Works with
 
-```bash
-bash <skill-install-path>/scripts/setup-openclaw-wrapper.sh
-```
+Tweets, YouTube, podcasts, articles, PDFs, screenshots, typed hunches.
 
-The agent knows where it installed the skill — use that path.
+Routes to: Robinhood (stocks), Hyperliquid (perps), Polymarket (prediction markets).
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) runtime
 - `yt-dlp` for YouTube extraction — the skill will offer to install it on first run
-- See [env.example](env.example) for all environment variables (required and optional)
+- See [env.example](env.example) for environment variables
 
-## Use cases
+## See it working
 
-YouTube (podcasts, long videos, interviews):
-```text
-/trade https://www.youtube.com/watch?v=<video_id>
-```
+- Live feed: [paste.trade](https://paste.trade)
+- How it works: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Changelog: [paste.trade/#changelog](https://paste.trade/#changelog)
 
-Twitter/X (tweets):
-```text
-/trade https://x.com/<handle>/status/<tweet_id>
-```
-
-Articles and PDFs:
-```text
-/trade https://example.com/research-note
-```
-
-Screenshots:
-```text
-/trade [attach screenshot] route every tradeable thesis in this image
-```
-
-Direct thesis (raw market observation):
-```text
-/trade NVDA is down 25% and Blackwell demand is unchanged. route the cleanest expression.
-```
-
-## Update
-
-### Claude Code / Codex
-
-Paste the repo URL into your agent again:
-
-```
-https://github.com/rohunvora/paste-trade-skill
-```
-
-### OpenClaw
-
-Paste the repo URL into your agent again:
-
-```
-https://github.com/rohunvora/paste-trade-skill
-```
-
-Then rerun wrapper setup from the installed skill directory:
-
-```bash
-bash <skill-install-path>/scripts/setup-openclaw-wrapper.sh
-```
-
-## Account portability
-
-- Preferred path: use one `PASTE_TRADE_KEY` across OpenClaw, Claude Code, and Codex.
-- To sign in to the web: run `bun run scripts/signin.ts` — opens a one-time link in your browser.
-
-## Repository structure
-
-```
-scripts/            CLI tools the skill agent calls
-shared/             Utility functions (price canonicalization, sentinel resolution)
-adapters/           Market API adapters (instrument discovery, route field parsing)
-references/         Supplementary docs loaded by SKILL.md
-openclaw-plugin/    OpenClaw-only async command bridge for fast /trade acknowledgment
-docs/install/       Client-specific install guides
-```
-
-## Docs
-
-- [How it works](ARCHITECTURE.md) — pipeline diagram, field glossary, streaming lifecycle
-- [OpenClaw install/update](docs/install/openclaw.md)
-- [Claude Code install/update](docs/install/claude-code.md)
-- [Codex install/update](docs/install/codex.md)
-- [Security](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
+The results are public. Go look.
